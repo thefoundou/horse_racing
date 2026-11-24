@@ -82,7 +82,11 @@ export function slideRunners(root: ParentNode): void {
   const runners = [...root.querySelectorAll<HTMLElement>('.runner[data-to]')];
   if (!runners.length) return;
   runners[0].getBoundingClientRect(); // commit the start position first
-  requestAnimationFrame(() => runners.forEach((el) => { el.style.left = el.dataset.to!; }));
+  requestAnimationFrame(() => runners.forEach((el) => {
+    el.classList.add('moving'); // bounces while it slides
+    el.style.left = el.dataset.to!;
+    el.addEventListener('transitionend', () => el.classList.remove('moving'), { once: true });
+  }));
 }
 
 export function dice(roll: number[] | null, big = false): string {

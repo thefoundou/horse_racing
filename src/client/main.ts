@@ -11,6 +11,7 @@ import { hostScreen } from './host';
 import { playerScreen } from './player';
 import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
+import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
 import { app, esc, money, r2, render, store, toast } from './ui';
 
@@ -117,6 +118,8 @@ interface Room {
   holdRaceUntil: number;
   /** Positions before the latest roll, so the next render can slide from them. */
   slideFrom: number[] | null;
+  /** The round whose results celebration has already played. */
+  celebratedRound: number;
   lastPhase: string;
   /** The join QR code overlay is open. */
   showQr: boolean;
@@ -131,7 +134,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, lastPhase: '', showQr: false, pendingPhoto: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, pendingPhoto: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -258,8 +261,8 @@ function onState(r: Room, s: PublicState, you: string) {
   }
   if (prev?.phase === 'racing' && s.phase === 'results' && s.mode === 'digital') {
     // Let the winner cross the line before switching to the results.
-    r.holdRaceUntil = Date.now() + 3000;
-    setTimeout(() => room === r && renderRoom(r), 3100);
+    r.holdRaceUntil = Date.now() + 3600;
+    setTimeout(() => room === r && renderRoom(r), 3700);
   }
   if (s.phase !== 'racing' || s.mode !== 'digital') stopAuto(r);
   if (s.phase !== 'racing') r.manualPick = null;
@@ -282,10 +285,12 @@ function renderRoom(r: Room) {
   const offline = r.ws?.readyState !== WebSocket.OPEN;
   const showRace = s.phase === 'racing' || (s.phase === 'results' && Date.now() < r.holdRaceUntil);
   document.body.classList.toggle('tv', isHost);
+  if (s.phase === 'lobby') r.celebratedRound = -1; // play again restarts the rounds
+  const celebrate = s.phase === 'results' && !showRace && r.celebratedRound !== s.round;
 
   let body: string;
-  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom });
-  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom });
+  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, celebrate });
+  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, celebrate });
   else return; // not joined yet
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
@@ -310,6 +315,7 @@ function renderRoom(r: Room) {
   document.getElementById('overlayShare')?.addEventListener('click', () => share(s.code));
   r.slideFrom = null; // slide once; later re-renders draw horses where they are
   slideRunners(app);
+  if (celebrate) { r.celebratedRound = s.round; runCountUps(app, s.players.length); }
   bind(r, s, me);
 }
 
@@ -363,7 +369,7 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('roll', () => send({ t: 'roll' }));
   on('auto', () => {
     if (r.autoRoll) stopAuto(r);
-    else { send({ t: 'roll' }); r.autoRoll = window.setInterval(() => send({ t: 'roll' }), 1100); }
+    else { send({ t: 'roll' }); r.autoRoll = window.setInterval(() => send({ t: 'roll' }), 1900); }
     renderRoom(r);
   });
   on('finish', () => send({ t: 'finish' }));
