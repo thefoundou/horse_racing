@@ -13,6 +13,7 @@ import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
+import { playBugle, playCheer, playGallop, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
 import { app, esc, money, r2, render, store, toast } from './ui';
 import { floorCents } from '../shared/game';
 
@@ -293,9 +294,34 @@ function onState(r: Room, s: PublicState, you: string) {
   if (s.phase !== 'racing' || s.mode !== 'digital') stopAuto(r);
   if (s.phase !== 'racing') r.manualPick = null;
   if (prev && prev.round === s.round && prev.positions.join() !== s.positions.join()) r.slideFrom = prev.positions;
+  if (s.hostId === you) raceSounds(prev, s);
   r.lastPhase = s.phase;
   renderRoom(r);
 }
+
+/** The big screen's soundtrack: bugle at the off, hooves and horses during the race, a cheer at the finish. */
+function raceSounds(prev: PublicState | null, s: PublicState) {
+  if (!prev) return; // joining or reloading mid-race: don't replay anything
+  const racing = s.phase === 'racing' && !s.winner;
+  if (s.phase === 'racing' && prev.phase !== 'racing') {
+    playBugle();
+    if (s.mode === 'digital') startRaceAmbience();
+  }
+  if (s.mode === 'digital' && prev.round === s.round && (s.phase === 'racing' || s.phase === 'results')) {
+    const moved = s.positions.filter((p, i) => p !== prev.positions[i]).length;
+    if (moved) playGallop(moved);
+  }
+  if (s.winner && !prev.winner) {
+    stopRaceAmbience();
+    // Digital: cheer as the winner reaches the line (after its slide). Manual: straight away.
+    window.setTimeout(playCheer, s.mode === 'digital' ? 1100 : 0);
+  }
+  if (!racing) stopRaceAmbience();
+}
+
+// Browsers only allow sound after the page is clicked: wake the audio on the first click or key.
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 
 function stopAuto(r: Room) {
   clearInterval(r.autoRoll);
@@ -376,7 +402,8 @@ function renderRoom(r: Room) {
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
   const right = isHost
-    ? `<span class="balance">${s.players.length} ${s.players.length === 1 ? 'player' : 'players'}</span>`
+    ? `<button class="chip sound" id="soundToggle" aria-pressed="${soundOn()}" title="${soundOn() ? 'Sound on: click to mute' : 'Sound off: click to turn on'}">${soundOn() ? '🔊' : '🔇'}</button>
+       <span class="balance">${s.players.length} ${s.players.length === 1 ? 'player' : 'players'}</span>`
     : `<span class="balance" title="Your money">${money(me!.balance)}</span>`;
   render(`
     <header class="bar">
@@ -431,6 +458,7 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   const on = (id: string, fn: () => void) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('shareBtn', () => share(s.code));
   on('home', () => go('/'));
+  on('soundToggle', () => { unlockAudio(); setSound(!soundOn()); renderRoom(r); });
   on('changePhoto', async () => {
     const photo = await pickPhoto();
     if (!photo) return;

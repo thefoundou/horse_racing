@@ -126,6 +126,7 @@ details[open].card summary { margin-bottom: 10px; }
 .chip.code { background: transparent; border: 2px solid var(--gold); padding: 5px 10px; letter-spacing: 0.2em; color: var(--gold); }
 .round { flex: 1; text-align: center; font-size: 0.9rem; }
 .balance { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.04em; }
+.chip.sound { background: transparent; border: 2px solid #ffffff33; color: var(--paper); padding: 3px 10px; font-size: 1.1rem; letter-spacing: 0; }
 .offline { background: var(--gold); color: var(--ink); text-align: center; padding: 6px; font-size: 0.9rem; margin: 0 -16px; }
 .screen { padding-top: 4px; }
 .waiting { text-align: center; color: var(--ink); margin: 20px 0; font-weight: 600; }
