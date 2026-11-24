@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyRoll, emptyBets, isTiedAtLine, net, odds, payout, pool, raceWinner, rollDice, sum,
+  applyRoll, cents, emptyBets, floorCents, isTiedAtLine, net, odds, payout, pool, raceWinner, rollDice, sum,
   validateBets, type Bets,
 } from './game';
 
@@ -105,5 +105,31 @@ describe('bet validation', () => {
   it('accepts up to the full balance, rounded to cents', () => {
     expect(validateBets([50, 50, 0, 0, 0, 0], 100)).toEqual([50, 50, 0, 0, 0, 0]);
     expect(validateBets([1.234, 0, 0, 0, 0, 0], 100)).toEqual([1.23, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe('all in at awkward balances (bug: $94.67 all-in rejected)', () => {
+  it('never rounds a bet limit up past the balance', () => {
+    expect(floorCents(94.666667)).toBe(94.66);
+    expect(floorCents(94.67)).toBe(94.67);
+    expect(floorCents(0.1 + 0.2)).toBe(0.3);
+    expect(cents(94.666667)).toBe(94.67);
+  });
+  it('accepts an all-in bet of the floored balance', () => {
+    expect(validateBets([94.66, 0, 0, 0, 0, 0], 94.666667)).toEqual([94.66, 0, 0, 0, 0, 0]);
+    expect(validateBets([94.67, 0, 0, 0, 0, 0], 94.67)).toEqual([94.67, 0, 0, 0, 0, 0]);
+    expect(validateBets([20, 21, 0, 0, 0, 0], 82)).toEqual([20, 21, 0, 0, 0, 0]);
+  });
+  it('explains how much you can bet when it is too much', () => {
+    expect(validateBets([94.67, 0, 0, 0, 0, 0], 94.666667)).toBe('You only have $94.66 to bet.');
+  });
+  it('settled balances in whole cents can always go all in', () => {
+    // Payouts of thirds: 100 split three ways, kept to the cent.
+    const all = [[10, 0, 0, 0, 0, 0], [0, 20, 0, 0, 0, 0], [5, 0, 0, 0, 0, 0]];
+    for (const p of all) {
+      const bal = cents(100 + cents(net(p, all, 0)));
+      expect(Math.round(bal * 100)).toBe(bal * 100);
+      expect(validateBets([bal, 0, 0, 0, 0, 0], bal)).toEqual([bal, 0, 0, 0, 0, 0]);
+    }
   });
 });

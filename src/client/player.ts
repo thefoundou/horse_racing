@@ -1,7 +1,7 @@
 // A player's phone: bet, see what you'd win, follow the race, check the
 // leaderboard. The host's big screen runs the game.
 
-import { HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
+import { floorCents, HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
 import type { PublicPlayer, PublicState } from '../shared/protocol';
 import { dice, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
@@ -46,52 +46,94 @@ function lobby(s: PublicState, me: PublicPlayer) {
     </div>`;
 }
 
-function betting(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+/** Everything on the betting screen that changes as bets come in. */
+function bettingModel(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
   const locked = me.locked || !me.playing;
   const mine = locked ? me.bets ?? Array(HORSES).fill(0) : c.draft!;
   // Live odds with my unsent edits folded in (unless the host hid them).
   const hidden = s.totals === null;
   const totals = (s.totals ?? Array(HORSES).fill(0)).map((t, h) => t - (me.bets?.[h] ?? 0) + (me.playing ? mine[h] : 0));
-  const p = sum(totals);
-  const od = totals.map((t) => (t === 0 ? 0 : p / t));
-  const staked = sum(mine);
-  const left = me.balance - staked;
+  const pool = sum(totals);
+  const odds = totals.map((t) => (t === 0 ? 0 : pool / t));
+  const staked = r2(sum(mine));
+  const left = floorCents(me.balance - staked);
   const waitingOn = s.players.filter((x) => x.playing && !x.locked).length;
+  return { locked, mine, hidden, totals, pool, odds, staked, left, waitingOn };
+}
 
+const statusList = (s: PublicState, me: PublicPlayer) =>
+  playerList(s, (x) => !x.playing ? 'sitting out' : x.locked ? '<span class="ok">✓ locked in</span>' : 'betting…', me.id);
+const waitingText = (n: number) => `Waiting on ${n} ${n === 1 ? 'player' : 'players'}`;
+
+/**
+ * Key for the betting screen's layout. While it stays the same, updates
+ * patch the numbers in place (patchBetting) instead of rebuilding the page,
+ * so the box you're typing in is never replaced mid-keystroke.
+ */
+export const bettingKey = (s: PublicState, me: PublicPlayer) =>
+  `${s.round}|${me.locked}|${me.playing}|${s.totals === null}|${s.hostConnected}|${s.players.length}`;
+
+function betting(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+  const m = bettingModel(s, me, c);
   const cards = Array.from({ length: HORSES }, (_, h) => `
-    <div class="bet-card ${mine[h] > 0 ? 'backed' : ''}">
+    <div class="bet-card ${m.mine[h] > 0 ? 'backed' : ''}" id="betcard${h}">
       <div class="bet-head">
         ${horse(h + 1, 'lg')}
         <div class="bet-odds">
-          ${hidden ? '<span class="odds muted">?</span><span class="muted small">Odds hidden</span>' : `
-          <span class="odds">${oddsText(od[h])}</span>
-          <span class="muted small">${money(totals[h])} on #${h + 1}</span>`}
+          ${m.hidden ? '<span class="odds muted">?</span><span class="muted small">Odds hidden</span>' : `
+          <span class="odds" id="odds${h}">${oddsText(m.odds[h])}</span>
+          <span class="muted small" id="total${h}">${money(m.totals[h])} on #${h + 1}</span>`}
         </div>
       </div>
       <div class="bet-input">
-        <button class="secondary sm" data-step="${h}" data-d="-5" ${locked || mine[h] <= 0 ? 'disabled' : ''} aria-label="Bet $5 less on ${h + 1}">−5</button>
-        <span class="dollar">$<input id="bet${h}" data-bet="${h}" inputmode="decimal" value="${esc(locked ? (mine[h] ? String(r2(mine[h])) : '') : c.draftText[h] ?? '')}" placeholder="0" ${locked ? 'disabled' : ''} aria-label="Bet on horse ${h + 1}" /></span>
-        <button class="secondary sm" data-step="${h}" data-d="5" ${locked || left <= 0.004 ? 'disabled' : ''} aria-label="Bet $5 more on ${h + 1}">+5</button>
+        <button class="secondary sm" data-step="${h}" data-d="-5" id="down${h}" ${m.locked || m.mine[h] <= 0 ? 'disabled' : ''} aria-label="Bet $5 less on ${h + 1}">−5</button>
+        <span class="dollar">$<input id="bet${h}" data-bet="${h}" type="text" inputmode="decimal" autocomplete="off" value="${esc(m.locked ? (m.mine[h] ? String(r2(m.mine[h])) : '') : c.draftText[h] ?? '')}" placeholder="0" ${m.locked ? 'disabled' : ''} aria-label="Bet on horse ${h + 1}" /></span>
+        <button class="secondary sm" data-step="${h}" data-d="5" id="up${h}" ${m.locked || m.left <= 0.004 ? 'disabled' : ''} aria-label="Bet $5 more on ${h + 1}">+5</button>
       </div>
     </div>`).join('');
 
   return `
+    <div id="betForm" data-key="${esc(bettingKey(s, me))}">
     ${!me.playing ? '<p class="note">You joined after betting started, so you sit this round out.</p>' : ''}
     <div class="bet-summary">
-      <div><span class="muted small">Staked</span><b>${money(staked)}</b></div>
-      <div><span class="muted small">Left</span><b>${money(left)}</b></div>
-      <div><span class="muted small">Pool</span><b>${hidden ? '?' : money(p)}</b></div>
+      <div><span class="muted small">Staked</span><b id="sumStaked">${money(m.staked)}</b></div>
+      <div><span class="muted small">Left</span><b id="sumLeft">${money(m.left)}</b></div>
+      <div><span class="muted small">Pool</span><b id="sumPool">${m.hidden ? '?' : money(m.pool)}</b></div>
     </div>
     <div class="bet-grid">${cards}</div>
-    ${hidden ? '<p class="note">Odds are hidden until everyone has locked in.</p>' : ''}
+    ${m.hidden ? '<p class="note">Odds are hidden until everyone has locked in.</p>' : ''}
     <p class="muted small center">Odds pay the whole pool to whoever backed the winner, split by stake. If nobody backed the winner, everyone loses their bets.</p>
     ${me.playing ? (me.locked
-      ? `<button class="secondary big" id="unlock" ${me.balance < 0.01 ? 'disabled' : ''}>${me.balance < 0.01 ? "You're out of money" : 'Change my bets'}</button>`
-      : `<button class="primary big" id="lock">Lock in ${money(staked)}</button>`) : ''}
+      ? `<div class="locked-summary">✓ Locked in ${money(m.staked)}</div>
+         <button class="secondary big" id="unlock" ${me.balance < 0.01 ? 'disabled' : ''}>${me.balance < 0.01 ? "You're out of money" : 'Change my bets'}</button>`
+      : `<button class="primary big" id="lock">Lock in ${money(m.staked)}</button>`) : ''}
     <div class="card">
-      <h2>Waiting on ${waitingOn} ${waitingOn === 1 ? 'player' : 'players'}</h2>
-      ${playerList(s, (x) => !x.playing ? 'sitting out' : x.locked ? '<span class="ok">✓ locked in</span>' : 'betting…', me.id)}
+      <h2 id="waitingOn">${waitingText(m.waitingOn)}</h2>
+      <div id="betStatus">${statusList(s, me)}</div>
+    </div>
     </div>`;
+}
+
+/** Update the betting numbers in place; inputs are left alone. */
+export function patchBetting(s: PublicState, me: PublicPlayer, c: PlayerCtx): void {
+  const m = bettingModel(s, me, c);
+  const set = (id: string, text: string) => { const el = document.getElementById(id); if (el && el.textContent !== text) el.textContent = text; };
+  for (let h = 0; h < HORSES; h++) {
+    if (!m.hidden) { set(`odds${h}`, oddsText(m.odds[h])); set(`total${h}`, `${money(m.totals[h])} on #${h + 1}`); }
+    document.getElementById(`betcard${h}`)?.classList.toggle('backed', m.mine[h] > 0);
+    const down = document.getElementById(`down${h}`) as HTMLButtonElement | null;
+    const up = document.getElementById(`up${h}`) as HTMLButtonElement | null;
+    if (down) down.disabled = m.locked || m.mine[h] <= 0;
+    if (up) up.disabled = m.locked || m.left <= 0.004;
+  }
+  set('sumStaked', money(m.staked));
+  set('sumLeft', money(m.left));
+  if (!m.hidden) set('sumPool', money(m.pool));
+  set('lock', `Lock in ${money(m.staked)}`);
+  set('waitingOn', waitingText(m.waitingOn));
+  const status = document.getElementById('betStatus');
+  const html = statusList(s, me);
+  if (status && status.innerHTML !== html) status.innerHTML = html;
 }
 
 function review(s: PublicState, me: PublicPlayer) {

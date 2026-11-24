@@ -49,6 +49,15 @@ export function net(bets: Bets, allBets: Bets[], winner: number): number {
 /** Trim float noise (e.g. 0.30000000000000004) without rounding real cents. */
 export const tidy = (x: number): number => Math.round(x * 1e6) / 1e6;
 
+/** Round to the nearest cent. Balances are kept in whole cents. */
+export const cents = (x: number): number => Math.round(x * 100) / 100;
+
+/**
+ * The most you can bet from `x`, in whole cents, never rounding up: $94.666
+ * lets you bet $94.66, not $94.67 (which would be more than you have).
+ */
+export const floorCents = (x: number): number => Math.floor(x * 100 + 1e-6) / 100;
+
 // ---- Digital race -------------------------------------------------------
 
 /** Roll three dice; each die (1..6) is the number of the horse it moves. */
@@ -88,6 +97,6 @@ export function validateBets(bets: unknown, balance: number): Bets | string {
     if (typeof b !== 'number' || !Number.isFinite(b) || b < 0) return 'Bets must be zero or more.';
     clean.push(Math.round(b * 100) / 100);
   }
-  if (sum(clean) > balance + 1e-9) return "You can't bet more than you have.";
+  if (sum(clean) > floorCents(balance) + 1e-9) return `You only have $${floorCents(balance).toFixed(2)} to bet.`;
   return clean;
 }
