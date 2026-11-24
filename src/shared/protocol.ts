@@ -48,6 +48,8 @@ export interface PublicState {
   manualFinished: boolean;
   /** Winning horse, 1..6. */
   winner: number | null;
+  /** Is the host's big screen connected? (The host runs the game but doesn't play.) */
+  hostConnected: boolean;
 }
 
 export type ClientMsg =

@@ -176,23 +176,63 @@ details[open].card summary { margin-bottom: 10px; }
 /* Race */
 .race-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; min-height: 44px; }
 .dice { display: flex; gap: 8px; }
+.dice.large .die { width: 64px; height: 64px; font-size: 2rem; border-radius: 14px; }
 .die {
   width: 40px; height: 40px; display: grid; place-items: center; border-radius: 9px;
   font-weight: 800; font-size: 1.2rem; animation: tumble 0.35s ease-out;
 }
 @keyframes tumble { from { transform: rotate(-90deg) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
-.track { display: flex; flex-direction: column; gap: 6px; }
-.lane { display: flex; align-items: center; gap: 8px; }
-.lane-track {
-  position: relative; flex: 1; height: calc(var(--token) + 8px); border-radius: 8px;
-  background: #0b1f15; display: grid; grid-template-columns: repeat(10, 1fr);
-  border-right: 4px solid; border-image: repeating-linear-gradient(#fff 0 6px, #111 6px 12px) 4;
+/* Track: turf lanes, a ruler of spaces 1-10, a chequered finish line. */
+.track { --steed-w: 56px; --lane-h: calc(var(--steed-w) * 0.62 + 6px); display: flex; flex-direction: column; gap: 3px; }
+.track.large { --steed-w: clamp(64px, 7.5vw, 128px); gap: 4px; }
+.ruler, .lane { display: flex; align-items: center; gap: 8px; }
+.ruler .gate-sp, .gate { width: 1.6em; flex: none; }
+.ruler .marks { flex: 1; display: grid; grid-template-columns: repeat(10, 1fr); font-size: 0.75rem; color: var(--muted); padding-left: var(--steed-w); }
+.ruler .marks span { text-align: right; padding-right: 2px; }
+.gate { height: 1.6em; display: grid; place-items: center; border-radius: 6px; font-weight: 800; font-size: 0.85rem; }
+.turf {
+  position: relative; flex: 1; height: var(--lane-h); border-radius: 6px; overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #ffffff18 calc(10% - 1px) 10%) var(--steed-w) 0 / calc(100% - var(--steed-w)) 100% no-repeat,
+    repeating-linear-gradient(90deg, #2f7a3c 0 40px, #2b7137 40px 80px);
+  border-bottom: 2px solid #e8f0e344;
 }
-.tick { border-right: 1px dashed #ffffff14; }
-.runner { position: absolute; top: 4px; transition: left 0.45s cubic-bezier(.3,1.4,.6,1); }
-.lane.won .lane-track { background: #f5c54233; }
-.lane.leading .runner .horse { box-shadow: 0 0 0 2px var(--accent); }
-.lane-pos { width: 2ch; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.turf::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 8px;
+  background: conic-gradient(#fff 25%, #111 0 50%, #fff 0 75%, #111 0) 0 0 / 8px 8px;
+}
+.runner { position: absolute; bottom: 1px; width: var(--steed-w); transition: left 0.6s cubic-bezier(.25,.9,.35,1.05); z-index: 1; }
+.lane.won .turf { box-shadow: inset 0 0 0 3px var(--accent); }
+.lane.won .runner { animation: victory 0.6s ease-in-out infinite alternate; }
+.lane.leading .gate { box-shadow: 0 0 0 2px var(--accent); }
+.lane-pos { width: 2ch; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); flex: none; }
+.track.large .lane-pos, .track.big .gate { font-size: 1.1rem; }
+@keyframes victory { to { transform: translateY(-6px); } }
+
+/* The horse. Legs pivot at the hip and swing while the race is running. */
+.steed { display: block; width: 100%; height: auto; overflow: visible; }
+.steed .leg { transform-box: fill-box; transform-origin: 50% 0; }
+.steed .cloth, .steed .silk { stroke: #0006; stroke-width: 0.6; }
+.steed .cloth-num { font: 800 10px system-ui, sans-serif; }
+.steed-1 .silk, .steed-1 .cloth { fill: var(--h1); } .steed-1 .cloth-num { fill: var(--h1-ink); }
+.steed-2 .silk, .steed-2 .cloth { fill: var(--h2); } .steed-2 .cloth-num { fill: var(--h2-ink); }
+.steed-3 .silk, .steed-3 .cloth { fill: var(--h3); } .steed-3 .cloth-num { fill: var(--h3-ink); }
+.steed-4 .silk, .steed-4 .cloth { fill: var(--h4); } .steed-4 .cloth-num { fill: var(--h4-ink); }
+.steed-5 .silk, .steed-5 .cloth { fill: var(--h5); } .steed-5 .cloth-num { fill: var(--h5-ink); }
+.steed-6 .silk, .steed-6 .cloth { fill: var(--h6); stroke: #fff9; } .steed-6 .cloth-num { fill: var(--h6-ink); }
+.running .steed .bob { animation: bob 0.36s ease-in-out infinite alternate; }
+.running .steed .leg { animation: gallop 0.36s ease-in-out infinite alternate; }
+.running .steed .ff { animation-delay: -0.09s; }
+.running .steed .nh { animation-delay: -0.18s; animation-direction: alternate-reverse; }
+.running .steed .fh { animation-delay: -0.27s; animation-direction: alternate-reverse; }
+.running .lane:nth-child(odd) .steed * { animation-duration: 0.4s; }
+@keyframes gallop { from { transform: rotate(-28deg); } to { transform: rotate(28deg); } }
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2.5px); } }
+@media (prefers-reduced-motion: reduce) {
+  .running .steed .bob, .running .steed .leg, .lane.won .runner { animation: none; }
+  .runner { transition-duration: 0.01s; }
+}
+
 .banner { margin-top: 12px; padding: 12px; border-radius: 12px; text-align: center; font-weight: 800; font-size: 1.2rem; }
 .banner.big { font-size: 1.7rem; padding: 18px; margin-top: 16px; }
 .banner.warn { background: #7a4b00; }
@@ -218,3 +258,49 @@ details[open].card summary { margin-bottom: 10px; }
   transition: opacity 0.2s, transform 0.2s; max-width: calc(100% - 32px); text-align: center; z-index: 10;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- Big screen (host) ---------------------------------------------------
+   The host's laptop, usually AirPlayed to a TV: wide, big type, nothing to
+   scroll if it can be helped. */
+body.tv { font-size: clamp(16px, 1.25vw, 22px); }
+body.tv #app { max-width: 1500px; padding: 0 clamp(16px, 3vw, 48px) 32px; }
+body.tv h2 { font-size: 1.3rem; }
+.tv-title { text-align: center; margin: 20px 0 8px; font-size: clamp(1.8rem, 3vw, 3rem); }
+.tv-hero { padding: 32px; }
+.tv-hero h1 { font-size: clamp(1.8rem, 3vw, 3rem); }
+.narrow { max-width: 420px; margin-left: auto; margin-right: auto; }
+.tv-lobby { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); padding-top: 12px; }
+.tv-two { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) {
+  .tv-lobby { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .tv-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+.join-panel h1 { font-size: clamp(2rem, 3.5vw, 3.4rem); }
+.qr.large { width: min(340px, 60vw); }
+.join-url { font-size: 1.6rem; font-weight: 800; margin: 0 0 4px; }
+body.tv .room-code { font-size: clamp(3rem, 6vw, 5.5rem); }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.row-between h2 { margin: 0; }
+.name-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.name-chip { background: #ffffff14; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 700; }
+.name-chip.locked { border-color: var(--pos); color: var(--pos); }
+.name-chip.away { opacity: 0.45; }
+.odds-board { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 12px 0; }
+@media (min-width: 900px) { .odds-board { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.odds-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; text-align: center; }
+.odds-horse { width: 80%; margin: 0 auto 4px; }
+.odds-big { font-size: clamp(1.4rem, 2.4vw, 2.4rem); font-weight: 800; }
+.pool { text-align: center; font-size: 1.3rem; color: var(--muted); }
+.pool b { color: var(--text); font-size: 1.6rem; }
+.race-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 16px 0; min-height: 64px; }
+.race-controls { margin-left: auto; display: flex; gap: 10px; }
+.race-controls button { padding: 14px 22px; font-size: 1.1rem; }
+body.tv .banner { font-size: clamp(1.4rem, 2.4vw, 2.4rem); padding: 16px; }
+.pick.large { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: 720px; margin: 20px auto; }
+@media (min-width: 900px) { .pick.large { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: none; } }
+.pick.large .pick-btn { padding: 12px; }
+.winner-hero { display: flex; align-items: center; justify-content: center; gap: 24px; border-radius: 20px; padding: 20px; margin: 16px 0; flex-wrap: wrap; text-align: center; }
+.winner-horse { background: var(--bg); border-radius: 16px; padding: 10px 14px; width: clamp(140px, 18vw, 250px); animation: victory 0.6s ease-in-out infinite alternate; }
+.winner-title { font-size: clamp(2rem, 4vw, 3.6rem); font-weight: 800; }
+.tv-tag { background: #ffffff26; color: var(--text); }

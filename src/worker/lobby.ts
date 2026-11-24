@@ -109,8 +109,10 @@ export class Lobby extends DurableObject<Env> {
         const playerId = this.hello(s, msg.playerId, msg.name);
         ws.serializeAttachment({ playerId } satisfies Attachment);
       } else {
-        const me = s.players.find((p) => p.id === att.playerId) ?? fail('Join the lobby first.');
-        this.act(s, me, msg);
+        // The host is the shared big screen, not a player.
+        const isHost = !!att.playerId && att.playerId === s.hostId;
+        const me = isHost ? null : s.players.find((p) => p.id === att.playerId) ?? fail('Join the lobby first.');
+        this.act(s, me, isHost, msg);
       }
       await this.save();
       this.broadcast();
@@ -134,6 +136,7 @@ export class Lobby extends DurableObject<Env> {
   private hello(s: State, playerId: unknown, rawName: unknown): string {
     if (typeof playerId !== 'string' || !playerId || playerId.length > 64) fail('Bad player id.');
     const id = playerId as string;
+    if (id === s.hostId) return id; // the host screen: watches and runs the game, never bets
     const existing = s.players.find((p) => p.id === id);
     if (existing) return id; // rejoining (refresh, new tab, dropped connection)
 
@@ -153,8 +156,9 @@ export class Lobby extends DurableObject<Env> {
     return id;
   }
 
-  private act(s: State, me: Player, msg: ClientMsg): void {
-    const isHost = me.id === s.hostId;
+  private act(s: State, player: Player | null, isHost: boolean, msg: ClientMsg): void {
+    const me = player ?? ({} as Player); // only read after self() below
+    const self = () => { if (!player) fail("The host screen doesn't bet."); };
     const host = () => { if (!isHost) fail('Only the host can do that.'); };
     const phase = (...ok: Phase[]) => { if (!ok.includes(s.phase)) fail('Not right now.'); };
 
@@ -171,11 +175,12 @@ export class Lobby extends DurableObject<Env> {
       }
       case 'start':
         host(); phase('lobby');
+        if (!s.players.length) fail('Wait for at least one player to join.');
         s.round = 1;
         return this.beginRound(s);
 
       case 'bets': {
-        phase('betting');
+        self(); phase('betting');
         if (!me.playing) fail("You're sitting this round out.");
         if (me.locked) fail('Your bets are locked in. Unlock to change them.');
         const bets = validateBets(msg.bets, me.balance);
@@ -184,13 +189,13 @@ export class Lobby extends DurableObject<Env> {
         return;
       }
       case 'lock':
-        phase('betting');
+        self(); phase('betting');
         if (!me.playing) fail("You're sitting this round out.");
         me.locked = true;
         return this.checkAllLocked(s);
 
       case 'unlock':
-        phase('betting');
+        self(); phase('betting');
         if (me.playing && me.balance >= BROKE) me.locked = false;
         return;
 
@@ -305,7 +310,7 @@ export class Lobby extends DurableObject<Env> {
       totals: s.phase === 'betting' && s.hideOdds ? null
         : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
       mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount,
-      manualFinished: s.manualFinished, winner: s.winner,
+      manualFinished: s.manualFinished, winner: s.winner, hostConnected: online.has(s.hostId),
     };
   }
 
