@@ -5,8 +5,10 @@ import { HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/ga
 import type { PublicPlayer, PublicState } from '../shared/protocol';
 import { dice, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
+import { gameRecap } from '../shared/recap';
+import { finalLeaderboard, moments, podium } from './recap-view';
 import { awardChips, liveLeaderboard, spotlight } from './awards-view';
-import { avatar, betsTable, cls, esc, horse, leaderboard, money, oddsText, playerList, r2 } from './ui';
+import { avatar, betsTable, cls, esc, horse, money, oddsText, playerList, r2 } from './ui';
 
 export interface PlayerCtx {
   draft: Bets | null;
@@ -24,7 +26,7 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   if (s.phase === 'review') return review(s, me);
   if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, c);
   if (s.phase === 'results') return results(s, me, c);
-  return finished(s, me);
+  return finished(s, me, c);
 }
 
 function lobby(s: PublicState, me: PublicPlayer) {
@@ -155,14 +157,26 @@ function results(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
     <p class="waiting">${s.round >= s.rounds ? 'That was the last race!' : 'The next round starts from the big screen.'}</p>`;
 }
 
-function finished(s: PublicState, me: PublicPlayer) {
-  const top = s.players.slice().sort((a, b) => b.balance - a.balance)[0];
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st … */
+function ordinal(n: number): string {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  return n + (teen ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+}
+
+function finished(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+  const recap = gameRecap(s);
+  const place = recap.ranked.findIndex((p) => p.id === me.id) + 1;
+  const mine = recap.moments.filter((m) => m.playerIds.includes(me.id));
+  const profit = me.balance - START_BALANCE;
   return `
     <div class="card center">
-      <div class="logo" aria-hidden="true">🏆</div>
-      <h2>${esc(top.name)} wins with ${money(top.balance)}</h2>
-      <p class="muted">${me.id === top.id ? 'Nice betting!' : `You finished with ${money(me.balance)}.`}</p>
+      <p class="muted">You finished</p>
+      <div class="result">${place === 1 ? '🏆 ' : ''}${ordinal(place)} <span class="muted small">of ${recap.ranked.length}</span></div>
+      <p class="${cls(profit)}"><b>${money(me.balance)}</b> (${money(profit, true)} on the day)</p>
     </div>
-    <div class="card"><h2>Final standings</h2>${leaderboard(s, me.id, false)}</div>
+    ${podium(s, recap, { animate: c.celebrate })}
+    ${mine.length ? `<h2 class="section-title">Your moments</h2>${moments(s, mine, { animate: c.celebrate })}` : ''}
+    <div class="card"><h2>Final leaderboard</h2>${finalLeaderboard(s, recap, me.id)}</div>
+    ${recap.moments.length > mine.length ? `<details class="card"><summary><h2>All the big moments</h2></summary>${moments(s, recap.moments, { animate: false })}</details>` : ''}
     <button class="link" id="home">Leave lobby</button>`;
 }

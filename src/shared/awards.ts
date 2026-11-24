@@ -61,6 +61,18 @@ export function rankChanges(s: PublicState) {
   return { before: ranks(s.players, balanceBefore), after: ranks(s.players, (p) => p.balance) };
 }
 
+/**
+ * A running streak worth flagging beside a player's name on the leaderboard
+ * (kept off the award badges, which are for rarer feats).
+ */
+export function streakBadge(p: Pick<PublicPlayer, 'history'>): { emoji: string; count: number; tone: 'good' | 'bad'; label: string } | null {
+  const wins = streak(p.history, (n) => n > EPS);
+  if (wins >= 2) return { emoji: '🔥', count: wins, tone: 'good', label: `On fire: ${wins} wins in a row` };
+  const losses = streak(p.history, (n) => n < -EPS);
+  if (losses >= 2) return { emoji: '🥶', count: losses, tone: 'bad', label: `Cold streak: ${losses} losses in a row` };
+  return null;
+}
+
 export function roundAwards(s: PublicState): RoundAwards {
   const played = s.players.filter((p) => p.playing && lastNet(p) != null);
   const byNet = played.slice().sort((a, b) => lastNet(b)! - lastNet(a)! || b.balance - a.balance);
@@ -84,11 +96,7 @@ export function roundAwards(s: PublicState): RoundAwards {
     const bets = p.bets ?? [];
     const staked = sum(bets);
     const prev = balanceBefore(p);
-    const wins = streak(p.history, (n) => n > EPS);
-    const losses = streak(p.history, (n) => n < -EPS);
 
-    if (wins >= 2) give(p, { id: 'hot', emoji: '🔥', title: 'On fire', detail: `${wins} wins in a row`, tone: 'good' });
-    if (losses >= 2) give(p, { id: 'cold', emoji: '🥶', title: 'Cold streak', detail: `${losses} losses in a row`, tone: 'bad' });
     if (net > EPS && w >= 0 && bets[w] > 0 && winOdds >= 4) {
       give(p, { id: 'longshot', emoji: '🎯', title: 'Long shot', detail: `Backed #${w + 1} at ×${winOdds.toFixed(1)}`, tone: 'good' });
     }

@@ -7,8 +7,10 @@ import { MAX_ROUNDS, type PublicState } from '../shared/protocol';
 import { joinUrl, qrSvg } from './qr';
 import { dice, horseSvg, HORSE_NUMBERS, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
+import { gameRecap } from '../shared/recap';
+import { finalLeaderboard, gameStats, moments, podium } from './recap-view';
 import { awardChips, liveLeaderboard, spotlight } from './awards-view';
-import { avatar, betsTable, esc, historyTable, leaderboard, money, oddsText } from './ui';
+import { avatar, betsTable, esc, historyTable, money, oddsText } from './ui';
 
 export interface HostCtx {
   autoRoll: boolean;
@@ -25,7 +27,7 @@ export function hostScreen(s: PublicState, c: HostCtx): string {
   if (s.phase === 'review') return review(s);
   if (c.showRace) return s.mode === 'manual' ? manual(s, c) : race(s, c);
   if (s.phase === 'results') return results(s, c);
-  return finished(s);
+  return finished(s, c);
 }
 
 function lobby(s: PublicState) {
@@ -170,18 +172,16 @@ function results(s: PublicState, c: HostCtx) {
     <button class="primary big narrow" id="next">${last ? 'Final standings' : `Next round (${s.round + 1} of ${s.rounds})`}</button>`;
 }
 
-function finished(s: PublicState) {
-  const ranked = s.players.slice().sort((a, b) => b.balance - a.balance);
-  const top = ranked[0];
+function finished(s: PublicState, c: HostCtx) {
+  const recap = gameRecap(s);
+  const top = recap.ranked[0];
   return `
-    <div class="card center tv-hero">
-      <div class="logo" aria-hidden="true">🏆</div>
-      <h1>${top ? `${esc(top.name)} wins with ${money(top.balance)}` : 'Game over'}</h1>
-    </div>
-    <div class="tv-two">
-      <div class="card"><h2>Final standings</h2>${leaderboard(s, '', false)}</div>
-      <div class="card"><h2>Round by round</h2>${historyTable(s)}</div>
-    </div>
+    <h1 class="tv-title">${top ? `${esc(top.name)} wins!` : 'Game over'}</h1>
+    ${podium(s, recap, { animate: c.celebrate, large: true })}
+    ${gameStats(recap)}
+    ${recap.moments.length ? `<h2 class="section-title">Biggest moments</h2>${moments(s, recap.moments, { animate: c.celebrate })}` : ''}
+    <div class="card"><h2>Final leaderboard</h2>${finalLeaderboard(s, recap, '', true)}</div>
+    <details class="card"><summary><h2>Round by round</h2></summary>${historyTable(s)}</details>
     <button class="primary big narrow" id="playAgain">Play again</button>
     <button class="link" id="home">Close lobby</button>`;
 }

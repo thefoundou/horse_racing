@@ -13,8 +13,11 @@ A multiplayer horse-betting party game for phones and laptops, based on the "Hor
      - *Digital:* the horses (with jockeys in their colours) canter across a turf track on the big screen, and in miniature on the phones, sliding and bouncing to each new spot. Each roll is 3 dice, and each die moves the horse with that number one space. The first horse to reach 10 that is strictly ahead of every other horse wins. If horses are tied at the line, keep rolling. Auto-roll is available.
      - *Manual:* run a real race, then the host presses **Finish** and picks the winner.
    - **Results:** winnings are paid out. The big screen shows the round's **biggest winner** (laurel wreath, sunburst, confetti) and **biggest loser** (a rain cloud), award badges, then a large leaderboard that sweeps in in the old order and shuffles into the new one while balances count up. Phones show the same, plus the player's own badges.
-   - **Awards** (`src/shared/awards.ts`): 🔥 On fire (2+ wins in a row), 🥶 Cold streak (2+ losses), 🎯 Long shot (won at ×4 or better), 💰/💸 All in, 🏹 Sharpshooter (only backed the winner), 🌈 Hedge fund (backed all six), 🪑 Wallflower (bet nothing), 🪦 Busted, ✌️ Doubled up ($200+), 🚀 Comeback (up 2+ places), 👑 New leader.
-4. After the last round, the final standings show a round-by-round table, like the spreadsheet's Results sheet. The host can start again.
+   - **Streaks** show beside names on the leaderboard: 🔥3 for three wins in a row, 🥶2 for two losses.
+   - **Awards** (`src/shared/awards.ts`): 🎯 Long shot (won at ×4 or better), 💰/💸 All in, 🏹 Sharpshooter (only backed the winner), 🌈 Hedge fund (backed all six), 🪑 Wallflower (bet nothing), 🪦 Busted, ✌️ Doubled up ($200+), 🚀 Comeback (up 2+ places), 👑 New leader.
+4. After the last round comes the **recap** (`src/shared/recap.ts`): a podium for the top three (plinths rise, then the players pop on, crown on the winner), the game in numbers, the **biggest moments** as cards, and the final leaderboard with each player's profit for the day. A round-by-round table, like the spreadsheet's Results sheet, is underneath. Phones show where you finished and your own moments. The host can start again.
+   - Moments: 💥 Biggest win, 😭 Most painful loss, 🎯 Longest shot (and who backed it), 🚀 Comeback of the day, 📉 Biggest collapse, 🔥 Hottest streak, 🥶 Coldest streak, 🎩 High roller, 👛 Tightest wallet, 🐎 Horse of the day, ⏱️ Longest race, 💰 Biggest pot, 🙈 Nobody saw it coming (rounds where nobody backed the winner).
+   - The lobby keeps a short log of each round (winner, race mode, rolls, pool, winning odds, each player's stake) for this.
 
 Players who join mid-game get $100 and sit out any round whose betting has already closed.
 

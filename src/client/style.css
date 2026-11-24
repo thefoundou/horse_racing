@@ -430,3 +430,70 @@ body.tv .banner { font-size: clamp(1.4rem, 2.4vw, 2.4rem); padding: 16px; }
 .leaders.large .delta { font-size: 1.1rem; min-width: 5em; text-align: right; }
 .leaders.large .bal { min-width: 5.5em; }
 .leaders.large li:first-child { background: #e3a92b2e; border-radius: 4px; }
+
+/* ---- End of game: podium, stats, biggest moments ------------------------ */
+.section-title { text-align: center; color: var(--paper); text-shadow: 0 2px 0 #1f2b2e33; font-size: 1.3rem; margin: 22px 0 6px; }
+body.tv .section-title { font-size: clamp(1.4rem, 2.2vw, 2rem); }
+
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin: 16px auto 6px; max-width: 560px; }
+.podium.large { max-width: 900px; gap: 18px; }
+.place { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; position: relative; }
+.place .podium-avatar { width: 72px; height: 72px; font-size: 1.8rem; border-width: 3px; box-shadow: 0 4px 12px #1f2b2e44; }
+.place-1 .podium-avatar { width: 92px; height: 92px; font-size: 2.4rem; }
+.podium.large .podium-avatar { width: clamp(90px, 9vw, 140px); height: clamp(90px, 9vw, 140px); font-size: 3rem; }
+.podium.large .place-1 .podium-avatar { width: clamp(120px, 12vw, 180px); height: clamp(120px, 12vw, 180px); font-size: 4rem; }
+.place-name { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.place-bal { font-weight: 700; font-size: 1.1rem; }
+.podium.large .place-name { font-size: 1.3rem; }
+.podium.large .place-bal { font-size: 1.6rem; }
+.plinth {
+  width: 100%; margin-top: 8px; border-radius: 4px 4px 0 0; display: grid; place-items: center;
+  font-family: var(--display); font-size: 1.8rem; color: var(--ink); box-shadow: 0 6px 18px #1f2b2e2e;
+}
+.place-1 .plinth { height: 110px; background: linear-gradient(#f3c75a, #d79a22); }
+.place-2 .plinth { height: 80px; background: linear-gradient(#e3e8ea, #aab5ba); }
+.place-3 .plinth { height: 58px; background: linear-gradient(#e2a171, #b46a3a); }
+.podium.large .place-1 .plinth { height: 150px; font-size: 2.6rem; }
+.podium.large .place-2 .plinth { height: 110px; font-size: 2.2rem; }
+.podium.large .place-3 .plinth { height: 80px; font-size: 2rem; }
+.crown { font-size: 2.2rem; line-height: 1; margin-bottom: -6px; animation: crown 1.6s ease-in-out infinite alternate; }
+.podium.large .crown { font-size: 3.2rem; }
+@keyframes crown { from { transform: rotate(-8deg) translateY(0); } to { transform: rotate(8deg) translateY(-4px); } }
+/* Plinths rise in 3rd, 2nd, 1st; then the people pop onto them. */
+.podium.animate .plinth { animation: rise 0.7s cubic-bezier(.2,.9,.3,1.1) both; animation-delay: calc(var(--d) * 0.45s); transform-origin: bottom; }
+.podium.animate .place > :not(.plinth) { animation: pop 0.5s cubic-bezier(.2,1.6,.4,1) both; animation-delay: calc(var(--d) * 0.45s + 0.5s); }
+@keyframes rise { from { transform: scaleY(0); } to { transform: none; } }
+
+.game-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0; }
+.game-stats > div { background: var(--ink); color: var(--paper); border-radius: 4px; padding: 8px 16px; display: flex; flex-direction: column; align-items: center; min-width: 100px; }
+.game-stats b { font-size: 1.3rem; }
+.game-stats span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: #c9c0a8; }
+
+.moments { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); margin: 10px 0 14px; }
+.moment {
+  background: var(--paper); border-radius: 6px; padding: 12px 14px; text-align: center; border-top: 6px solid var(--line);
+  box-shadow: 0 6px 18px #1f2b2e22; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.moment.good { border-top-color: var(--pos); }
+.moment.bad { border-top-color: var(--neg); }
+.moment.neutral { border-top-color: var(--gold); }
+.moment.animate { animation: pop 0.5s cubic-bezier(.2,1.5,.4,1) both; animation-delay: calc(1.6s + var(--i) * 0.18s); }
+.moment-top { display: flex; align-items: center; gap: 6px; }
+.moment-emoji { font-size: 1.5rem; }
+.moment-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.85rem; }
+.moment-who { display: flex; justify-content: center; margin: 4px 0; }
+.moment-who .avatar { width: 52px; height: 52px; font-size: 1.4rem; margin: 0 -6px; }
+.moment-horse { width: 96px; margin: 2px 0; background: linear-gradient(var(--sky) 72%, var(--turf-a) 72%); border-radius: 4px; padding: 6px 8px 2px; }
+.moment-headline { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.moment-detail { font-size: 0.9rem; color: var(--muted); }
+body.tv .moment-headline { font-size: clamp(1.5rem, 2vw, 2rem); }
+body.tv .moment-who .avatar { width: 60px; height: 60px; }
+@media (prefers-reduced-motion: reduce) {
+  .crown, .podium.animate .plinth, .podium.animate .place > *, .moment.animate { animation: none !important; }
+}
+/* Win/loss streak beside a name on the leaderboard. */
+.streak { display: inline-flex; align-items: center; gap: 1px; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 700; vertical-align: middle; }
+.streak.good { background: #c8442f1f; color: var(--red); animation: flicker 1.2s ease-in-out infinite alternate; }
+.streak.bad { background: #2f5d8a1f; color: var(--h3); }
+@keyframes flicker { from { transform: scale(1); } to { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .streak.good { animation: none; } }
