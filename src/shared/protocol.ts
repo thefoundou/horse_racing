@@ -33,11 +33,13 @@ export interface PublicState {
   hostId: string;
   phase: Phase;
   rounds: number;
+  /** Keep odds and pool totals secret until betting closes. */
+  hideOdds: boolean;
   /** 1-based; 0 before the game starts. */
   round: number;
   players: PublicPlayer[];
-  /** Total on each horse this round (live while betting). */
-  totals: number[];
+  /** Total on each horse this round: live while betting, or null if the host hid the odds. */
+  totals: number[] | null;
   mode: RaceMode | null;
   positions: number[];
   lastRoll: number[] | null;
@@ -50,7 +52,7 @@ export interface PublicState {
 
 export type ClientMsg =
   | { t: 'hello'; playerId: string; name: string }
-  | { t: 'config'; rounds: number }
+  | { t: 'config'; rounds?: number; hideOdds?: boolean }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }
   | { t: 'lock' }

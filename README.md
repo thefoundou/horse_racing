@@ -6,8 +6,8 @@ A multiplayer horse-betting party game for phones and laptops, based on the "Hor
 
 1. Someone taps **Start a lobby**. They become the host and get a 4-letter room code (the link `/<CODE>` works too).
 2. Everyone else enters the code and picks a display name. Each player starts with **$100** of play money.
-3. The host picks the number of rounds and starts the game. Each round:
-   - **Betting:** bet any amounts on horses 1–6, up to your balance. Live odds update as people bet. Other players' bets stay hidden until betting closes. Tap **Lock in** when you're done. You can unlock and change your bets until everyone has locked in. The host can also **Close betting** early (for example, if someone has wandered off).
+3. The host picks the number of rounds and whether to **hide the odds until all bets are in**, then starts the game. Each round:
+   - **Betting:** bet any amounts on horses 1–6, up to your balance. Live odds update as people bet, unless the host hid them; then players bet blind, and the odds and pool totals aren't even sent to browsers until betting closes. Other players' bets stay hidden until betting closes. Tap **Lock in** when you're done. You can unlock and change your bets until everyone has locked in. The host can also **Close betting** early (for example, if someone has wandered off).
    - **Bets are in:** everyone sees what they'd get back for each possible winner, plus the full bet table.
    - **Race:** the host picks the mode.
      - *Digital:* each tap rolls 3 dice, and each die moves the horse with that number one space. The first horse to reach 10 that is strictly ahead of every other horse wins. If horses are tied at the line, keep rolling. Auto-roll is available.

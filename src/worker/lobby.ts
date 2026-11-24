@@ -28,6 +28,7 @@ interface State {
   hostId: string;
   phase: Phase;
   rounds: number;
+  hideOdds?: boolean;
   round: number;
   players: Player[];
   mode: RaceMode | null;
@@ -160,9 +161,12 @@ export class Lobby extends DurableObject<Env> {
     switch (msg.t) {
       case 'config': {
         host(); phase('lobby');
-        const n = Math.floor(Number(msg.rounds));
-        if (!(n >= 1 && n <= MAX_ROUNDS)) fail(`Rounds must be 1-${MAX_ROUNDS}.`);
-        s.rounds = n;
+        if (msg.rounds !== undefined) {
+          const n = Math.floor(Number(msg.rounds));
+          if (!(n >= 1 && n <= MAX_ROUNDS)) fail(`Rounds must be 1-${MAX_ROUNDS}.`);
+          s.rounds = n;
+        }
+        if (msg.hideOdds !== undefined) s.hideOdds = msg.hideOdds === true;
         return;
       }
       case 'start':
@@ -288,7 +292,7 @@ export class Lobby extends DurableObject<Env> {
   private view(s: State, you: string | null, online: Set<string>): PublicState {
     const open = s.phase === 'lobby' || s.phase === 'betting';
     return {
-      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, round: s.round,
+      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, hideOdds: !!s.hideOdds, round: s.round,
       players: s.players.map((p) => {
         const visible = p.id === you || !open;
         return {
@@ -297,7 +301,9 @@ export class Lobby extends DurableObject<Env> {
           bets: visible ? p.bets : null, staked: visible ? sum(p.bets) : null,
         };
       }),
-      totals: horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
+      // Hidden odds are withheld from the wire, not just the screen.
+      totals: s.phase === 'betting' && s.hideOdds ? null
+        : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
       mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount,
       manualFinished: s.manualFinished, winner: s.winner,
     };

@@ -348,16 +348,21 @@ function lobbyScreen(s: PublicState, isHost: boolean) {
           <span class="value">${s.rounds}</span>
           <button class="secondary" id="roundsUp" ${s.rounds >= MAX_ROUNDS ? 'disabled' : ''} aria-label="More rounds">+</button>
         </div>
+        <label class="toggle">
+          <input type="checkbox" id="hideOdds" ${s.hideOdds ? 'checked' : ''} />
+          <span><b>Hide odds until all bets are in</b><br /><span class="muted small">Players bet blind: no live odds or pool totals while betting.</span></span>
+        </label>
         <button class="primary big" id="start">Start game</button>
       </div>`
-    : `<p class="waiting">Waiting for the host to start a ${s.rounds}-round game…</p>`}`;
+    : `<p class="waiting">Waiting for the host to start a ${s.rounds}-round game${s.hideOdds ? ' (odds hidden until all bets are in)' : ''}…</p>`}`;
 }
 
 function bettingScreen(r: Room, s: PublicState, me: PublicPlayer, isHost: boolean) {
   const locked = me.locked || !me.playing;
   const mine = locked ? me.bets ?? Array(HORSES).fill(0) : r.draft!;
-  // Live odds with my unsent edits folded in.
-  const totals = s.totals.map((t, h) => t - (me.bets?.[h] ?? 0) + (me.playing ? mine[h] : 0));
+  // Live odds with my unsent edits folded in (unless the host hid them).
+  const hidden = s.totals === null;
+  const totals = (s.totals ?? Array(HORSES).fill(0)).map((t, h) => t - (me.bets?.[h] ?? 0) + (me.playing ? mine[h] : 0));
   const p = sum(totals);
   const od = totals.map((t) => (t === 0 ? 0 : p / t));
   const staked = sum(mine);
@@ -369,8 +374,9 @@ function bettingScreen(r: Room, s: PublicState, me: PublicPlayer, isHost: boolea
       <div class="bet-head">
         ${horse(h + 1, 'lg')}
         <div class="bet-odds">
+          ${hidden ? '<span class="odds muted">?</span><span class="muted small">Odds hidden</span>' : `
           <span class="odds">${oddsText(od[h])}</span>
-          <span class="muted small">${money(totals[h])} on #${h + 1}</span>
+          <span class="muted small">${money(totals[h])} on #${h + 1}</span>`}
         </div>
       </div>
       <div class="bet-input">
@@ -385,9 +391,10 @@ function bettingScreen(r: Room, s: PublicState, me: PublicPlayer, isHost: boolea
     <div class="bet-summary">
       <div><span class="muted small">Staked</span><b>${money(staked)}</b></div>
       <div><span class="muted small">Left</span><b>${money(left)}</b></div>
-      <div><span class="muted small">Pool</span><b>${money(p)}</b></div>
+      <div><span class="muted small">Pool</span><b>${hidden ? '?' : money(p)}</b></div>
     </div>
     <div class="bet-grid">${cards}</div>
+    ${hidden ? '<p class="note">Odds are hidden until everyone has locked in.</p>' : ''}
     <p class="muted small center">Odds pay the whole pool to whoever backed the winner, split by stake. If nobody backed the winner, everyone loses their bets.</p>
     ${me.playing ? (me.locked
       ? `<button class="secondary big" id="unlock" ${me.balance < 0.01 ? 'disabled' : ''}>${me.balance < 0.01 ? "You're out of money" : 'Change my bets'}</button>`
@@ -585,6 +592,8 @@ function bind(r: Room, s: PublicState, me: PublicPlayer) {
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));
+  const hide = document.getElementById('hideOdds') as HTMLInputElement | null;
+  if (hide) hide.onchange = () => send({ t: 'config', hideOdds: hide.checked });
   on('lock', () => { flushBets(r); send({ t: 'lock' }); });
   on('unlock', () => send({ t: 'unlock' }));
   on('closeBetting', () => {
