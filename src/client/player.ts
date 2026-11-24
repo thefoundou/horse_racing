@@ -4,6 +4,8 @@
 import { HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
 import type { PublicPlayer, PublicState } from '../shared/protocol';
 import { dice, raceStatus, track } from './race';
+import { roundAwards } from '../shared/awards';
+import { awardChips, liveLeaderboard, spotlight } from './awards-view';
 import { avatar, betsTable, cls, esc, horse, leaderboard, money, oddsText, playerList, r2 } from './ui';
 
 export interface PlayerCtx {
@@ -11,6 +13,7 @@ export interface PlayerCtx {
   draftText: string[];
   showRace: boolean;
   slideFrom: number[] | null;
+  celebrate: boolean;
 }
 
 const bigScreen = '<span class="tag tv-tag">big screen</span>';
@@ -20,7 +23,7 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   if (s.phase === 'betting') return betting(s, me, c);
   if (s.phase === 'review') return review(s, me);
   if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, c);
-  if (s.phase === 'results') return results(s, me);
+  if (s.phase === 'results') return results(s, me, c);
   return finished(s, me);
 }
 
@@ -134,7 +137,8 @@ function manual(s: PublicState) {
     </div>`;
 }
 
-function results(s: PublicState, me: PublicPlayer) {
+function results(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+  const aw = roundAwards(s);
   const w = s.winner!;
   const myNet = me.history[me.history.length - 1];
   const nobody = horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets ?? []))[w - 1] === 0;
@@ -144,8 +148,10 @@ function results(s: PublicState, me: PublicPlayer) {
     <div class="card center">
       <p class="muted">Your result this round</p>
       <div class="result ${cls(myNet ?? 0)}">${myNet == null ? 'Sat out' : money(myNet, true)}</div>
+      ${awardChips(s, aw.awards, { only: me.id })}
     </div>
-    <div class="card"><h2>Leaderboard</h2>${leaderboard(s, me.id)}</div>
+    ${spotlight(s, aw)}
+    <div class="card"><h2>Leaderboard</h2>${liveLeaderboard(s, me.id, { animate: c.celebrate })}</div>
     <p class="waiting">${s.round >= s.rounds ? 'That was the last race!' : 'The next round starts from the big screen.'}</p>`;
 }
 

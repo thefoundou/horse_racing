@@ -6,6 +6,8 @@ import { FINISH, horseTotals, sum } from '../shared/game';
 import { MAX_ROUNDS, type PublicState } from '../shared/protocol';
 import { joinUrl, qrSvg } from './qr';
 import { dice, horseSvg, HORSE_NUMBERS, raceStatus, track } from './race';
+import { roundAwards } from '../shared/awards';
+import { awardChips, liveLeaderboard, spotlight } from './awards-view';
 import { avatar, betsTable, esc, historyTable, leaderboard, money, oddsText } from './ui';
 
 export interface HostCtx {
@@ -13,6 +15,8 @@ export interface HostCtx {
   manualPick: number | null;
   showRace: boolean;
   slideFrom: number[] | null;
+  /** First showing of this round's results: play the celebration. */
+  celebrate: boolean;
 }
 
 export function hostScreen(s: PublicState, c: HostCtx): string {
@@ -20,7 +24,7 @@ export function hostScreen(s: PublicState, c: HostCtx): string {
   if (s.phase === 'betting') return betting(s);
   if (s.phase === 'review') return review(s);
   if (c.showRace) return s.mode === 'manual' ? manual(s, c) : race(s, c);
-  if (s.phase === 'results') return results(s);
+  if (s.phase === 'results') return results(s, c);
   return finished(s);
 }
 
@@ -148,20 +152,21 @@ function manual(s: PublicState, c: HostCtx) {
     </div>`;
 }
 
-function results(s: PublicState) {
+function results(s: PublicState, c: HostCtx) {
   const w = s.winner!;
   const totals = horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets ?? []));
   const last = s.round >= s.rounds;
+  const aw = roundAwards(s);
   return `
-    <div class="winner-hero h${w}-bg">
-      <div class="winner-horse">${horseSvg(w)}</div>
-      <div><div class="winner-title">Horse ${w} wins!</div>
-      ${totals[w - 1] === 0 ? `<div>Nobody backed horse ${w}, so every stake is lost.</div>` : ''}</div>
+    <div class="result-strip h${w}-bg">
+      <div class="strip-horse">${horseSvg(w)}</div>
+      <div class="strip-title">Horse ${w} wins!</div>
+      ${totals[w - 1] === 0 ? `<div class="strip-note">Nobody backed horse ${w}: every stake is lost.</div>` : ''}
     </div>
-    <div class="tv-two">
-      <div class="card"><h2>Leaderboard</h2>${leaderboard(s, '')}</div>
-      <div class="card"><h2>This round's bets</h2>${betsTable(s, w)}</div>
-    </div>
+    ${spotlight(s, aw, true)}
+    ${awardChips(s, aw.awards, { large: true })}
+    <div class="card lb-card"><h2>Leaderboard · after round ${s.round}</h2>${liveLeaderboard(s, '', { animate: c.celebrate, large: true })}</div>
+    <details class="card"><summary><h2>This round's bets</h2></summary>${betsTable(s, w)}</details>
     <button class="primary big narrow" id="next">${last ? 'Final standings' : `Next round (${s.round + 1} of ${s.rounds})`}</button>`;
 }
 
