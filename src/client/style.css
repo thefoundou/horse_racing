@@ -95,8 +95,6 @@ details[open].card summary { margin-bottom: 10px; }
 .hero .tagline { font-family: var(--deco); text-transform: uppercase; letter-spacing: 0.18em; color: var(--paper); font-weight: 600; margin: 4px 0 0; }
 .hero p { color: var(--ink); max-width: 30em; margin: 0 auto; }
 .hero.small h1 { font-size: 2rem; }
-.scene { margin: 8px auto 0; max-width: 520px; }
-.scene .track { --steed-w: 30%; }
 .logo { font-size: 3.5rem; line-height: 1; margin-bottom: 8px; }
 .code-input { text-align: center; font-size: 2rem; letter-spacing: 0.4em; text-transform: uppercase; font-weight: 700; margin-top: 6px; padding-left: calc(14px + 0.4em); }
 .room-code { font-family: var(--deco); font-size: 3rem; font-weight: 700; letter-spacing: 0.25em; padding-left: 0.25em; color: var(--red); }
@@ -215,38 +213,79 @@ details[open].card summary { margin-bottom: 10px; }
 }
 @keyframes tumble { from { transform: rotate(-90deg) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
 
-/* Track: striped turf lanes under a white rail, spaces 1-10, chequered finish. */
+/* Track: striped turf lanes under a white rail, spaces 1-10, chequered finish.
+   Spaces 1-10 are equal squares (--unit). A horse is --k squares long with
+   its nose on the far edge of its square, and the start box is just long
+   enough to hold it. On the big screen a strip on the left (--follow-w)
+   holds the photos of the people who backed each horse, following it. */
 .track {
-  --steed-w: 56px; --lane-h: calc(var(--steed-w) * 0.62 + 6px);
+  --follow-w: 0px;
+  --k: 2;
+  --side: calc(32px + 1.6em + 2ch); /* lane padding, gaps, gate and count */
+  --unit: calc((100cqw - var(--side) - var(--follow-w)) / (var(--k) + 10));
+  --lane-h: calc(var(--unit) * var(--k) * 0.62 + 8px);
+  container-type: inline-size;
   display: flex; flex-direction: column; gap: 0; border-radius: 6px; overflow: hidden;
   background: var(--turf-a); padding: 0 0 6px; box-shadow: 0 6px 18px #1f2b2e2e;
 }
-.track.large { --steed-w: clamp(64px, 7.5vw, 128px); }
+.track.large { --k: 1; --side: calc(32px + 1.76em + 2.2ch); }
+.track.followers-on { --follow-w: clamp(100px, 10vw, 180px); }
 .ruler, .lane { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .ruler {
   padding-top: 6px; padding-bottom: 8px; color: var(--ink); font-weight: 700;
   background: linear-gradient(var(--paper) 0 0) 0 100% / 100% 6px no-repeat, var(--sky);
 }
 .ruler .gate-sp, .gate { width: 1.6em; flex: none; }
-.ruler .marks { flex: 1; display: grid; grid-template-columns: repeat(10, 1fr); font-size: 0.75rem; padding-left: var(--steed-w); }
+.ruler .marks { flex: 1; display: grid; grid-template-columns: 2fr repeat(10, 1fr); font-size: 0.75rem; padding-left: var(--follow-w); }
+.track.large .ruler .marks { grid-template-columns: repeat(11, 1fr); }
 .ruler .marks span { text-align: right; padding-right: 2px; }
+.ruler .marks .start-label { text-align: left; padding-left: 4px; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; }
 .gate { height: 1.6em; display: grid; place-items: center; border-radius: 3px; font-weight: 700; font-size: 0.85rem; }
 .lane:nth-child(even) .turf { background-color: var(--turf-a); }
 .lane:nth-child(odd) .turf { background-color: var(--turf-b); }
 .turf {
-  position: relative; flex: 1; height: var(--lane-h); overflow: hidden;
-  background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #ffffff22 calc(10% - 1px) 10%);
-  background-position: var(--steed-w) 0; background-size: calc(100% - var(--steed-w)) 100%; background-repeat: no-repeat;
+  /* Not clipped: a hopping horse can rise into the lane above, drawn on top of it. */
+  --start: calc(var(--follow-w) + var(--k) * var(--unit)); /* where space 1 begins */
+  position: relative; flex: 1; height: var(--lane-h); overflow: visible;
+  /* The start box is a shade darker than the course. */
+  background-image: linear-gradient(90deg, transparent 0 var(--follow-w), #1f2b2e1c var(--follow-w) var(--start), transparent var(--start));
+}
+.turf::before { /* a line at the end of every space */
+  content: ""; position: absolute; top: 0; bottom: 0; left: var(--start); right: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #ffffff2a calc(10% - 1px) 10%);
 }
 .turf::after {
   content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 8px;
   background: conic-gradient(var(--paper) 25%, var(--ink) 0 50%, var(--paper) 0 75%, var(--ink) 0) 0 0 / 8px 8px;
 }
 /* Each roll slides a horse along at a gallop rather than jumping (see slideRunners). */
-.runner { position: absolute; bottom: 1px; width: var(--steed-w); transition: left 1.4s cubic-bezier(.4,0,.3,1); z-index: 1; }
+.runner {
+  position: absolute; bottom: 1px; width: calc(var(--k) * var(--unit));
+  transition: left 1.4s cubic-bezier(.4,0,.3,1); z-index: 2;
+}
+.runner.moving { z-index: 3; } /* a moving horse is drawn over its neighbours */
 /* A few hops while it slides, like a canter. */
 .runner.moving .steed { animation: hop 0.35s ease-in-out 4; }
 @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16%); } }
+
+/* Big screen: the backers' photos trail their horse and bounce along with it. */
+.followers { position: absolute; right: 90%; bottom: 4%; display: flex; flex-direction: row-reverse; align-items: flex-end; pointer-events: none; }
+.follower {
+  --a: min(calc(var(--follow-w) / 2.6), calc(var(--lane-h) * 0.74));
+  display: block; margin-left: calc(var(--a) * -0.45); position: relative; z-index: calc(10 - var(--k));
+}
+.follower:last-child { margin-left: 0; }
+.follower .avatar { width: var(--a); height: var(--a); font-size: calc(var(--a) * 0.45); border-width: 2px; box-shadow: 0 2px 6px #1f2b2e66; }
+.follower .more { background: var(--ink); color: var(--paper); font-size: calc(var(--a) * 0.36); }
+.running .follower { animation: bob 0.45s ease-in-out infinite alternate; animation-delay: calc(var(--k) * -0.12s); }
+.runner.moving .follower { animation: hop-follow 0.35s ease-in-out 4; animation-delay: calc(var(--k) * 0.07s); }
+@keyframes hop-follow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-38%); } }
+
+/* Phone: the horses you backed glow, so you can follow them. */
+.lane.mine .steed { filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px var(--gold)); animation: mine-glow 1.2s ease-in-out infinite alternate; }
+.lane.mine .gate { box-shadow: 0 0 0 2px var(--gold), 0 0 10px var(--gold); }
+@keyframes mine-glow { to { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 12px var(--gold)); } }
+.mine-note { font-size: 0.85rem; text-align: center; margin: 0 0 8px; font-weight: 600; }
 .lane.won .turf { box-shadow: inset 0 0 0 3px var(--gold); }
 .lane.won .runner { animation: victory 0.6s ease-in-out infinite alternate; }
 .lane.leading .gate { box-shadow: 0 0 0 2px var(--paper); }
@@ -274,7 +313,7 @@ details[open].card summary { margin-bottom: 10px; }
 @keyframes gallop { from { transform: rotate(-28deg); } to { transform: rotate(28deg); } }
 @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2.5px); } }
 @media (prefers-reduced-motion: reduce) {
-  .steed .bob, .steed .leg, .lane.won .runner, .winner-horse, .runner.moving .steed,
+  .steed .bob, .steed .leg, .lane.won .runner, .winner-horse, .runner.moving .steed, .follower, .lane.mine .steed,
   .sunburst, .confetti i, .raincloud .drop, .leaders.live li, .award { animation: none !important; }
   .runner { transition-duration: 0.01s; }
 }
@@ -510,3 +549,6 @@ body.tv .moment-who .avatar { width: 60px; height: 60px; }
 
 /* "✓ Locked in $41" above Change my bets: what the lobby actually has. */
 .locked-summary { text-align: center; font-weight: 700; color: var(--pos); margin-top: 14px; font-size: 1.1rem; }
+
+/* Phone: give the race the full width of the card. */
+.card.race { padding-left: 8px; padding-right: 8px; }

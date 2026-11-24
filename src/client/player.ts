@@ -24,7 +24,7 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   if (s.phase === 'lobby') return lobby(s, me);
   if (s.phase === 'betting') return betting(s, me, c);
   if (s.phase === 'review') return review(s, me);
-  if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, c);
+  if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, me, c);
   if (s.phase === 'results') return results(s, me, c);
   return finished(s, me, c);
 }
@@ -162,11 +162,13 @@ function review(s: PublicState, me: PublicPlayer) {
     <p class="waiting">The race starts on the ${bigScreen}…</p>`;
 }
 
-function race(s: PublicState, c: PlayerCtx) {
+function race(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+  const backed = (me.bets ?? []).some((b) => b > 0);
   return `
     <div class="card race">
       <div class="race-top">${dice(s.lastRoll)}<span class="muted small">Roll ${s.rollCount}</span></div>
-      ${track(s, { from: c.slideFrom })}
+      ${backed ? '<p class="mine-note">✨ Your horses are glowing</p>' : ''}
+      ${track(s, { from: c.slideFrom, mine: me.bets })}
       ${raceStatus(s)}
     </div>
     ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;

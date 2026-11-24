@@ -2,6 +2,7 @@
 
 import { FINISH, HORSES, isTiedAtLine } from '../shared/game';
 import type { PublicState } from '../shared/protocol';
+import { avatar, esc } from './ui';
 
 const COAT = ['#8a4b25', '#5e3a22', '#a0602f', '#3f2a1c', '#7b4a2c', '#6b3d1f'];
 const MANE = ['#2e1b0f', '#1f130b', '#3a2213', '#120c07', '#2a180c', '#24150b'];
@@ -43,35 +44,49 @@ export function horseSvg(h: number): string {
 
 /** The track; `running` makes the horses gallop. */
 /** Where a runner sits for a position: 0 at the gate, the nose on the line at FINISH. */
-const runnerLeft = (pos: number) => {
-  const pct = (Math.min(pos, FINISH) / FINISH) * 100;
-  return `calc(${pct}% - ${pct / 100} * var(--steed-w))`;
-};
+/** Where a runner sits: `pos` squares past the start, so its nose is on the far edge of space `pos`. */
+const runnerLeft = (pos: number) => `calc(var(--follow-w) + ${Math.min(pos, FINISH)} * var(--unit))`;
+
+/** The photos of everyone who backed a horse, biggest stake nearest the horse. */
+function followers(s: PublicState, h: number): string {
+  const backers = s.players
+    .filter((p) => p.playing && (p.bets?.[h - 1] ?? 0) > 0)
+    .sort((a, b) => (b.bets![h - 1] - a.bets![h - 1]) || a.name.localeCompare(b.name));
+  if (!backers.length) return '';
+  const shown = backers.slice(0, backers.length > 4 ? 3 : 4);
+  const extra = backers.length - shown.length;
+  return `<div class="followers" aria-label="Backed by ${esc(backers.map((p) => p.name).join(', '))}">${
+    shown.map((p, k) => `<span class="follower" style="--k:${k}">${avatar(s.code, p)}</span>`).join('')
+  }${extra ? `<span class="follower" style="--k:${shown.length}"><span class="avatar more">+${extra}</span></span>` : ''}</div>`;
+}
 
 /**
  * The track; `running` makes the horses gallop. Pass `from` (the positions
  * before the latest roll) and each runner is drawn there with its target in
  * data-to; slideRunners() then moves them so they glide instead of jumping.
  */
-export function track(s: PublicState, opts: { big?: boolean; from?: number[] | null } = {}): string {
+export function track(
+  s: PublicState,
+  opts: { big?: boolean; from?: number[] | null; followers?: boolean; mine?: number[] | null } = {},
+): string {
   const running = s.phase === 'racing' && !s.winner;
   const lead = Math.max(...s.positions);
-  const marks = Array.from({ length: FINISH }, (_, i) => `<span>${i + 1}</span>`).join('');
+  const marks = '<span class="start-label">Start</span>' + Array.from({ length: FINISH }, (_, i) => `<span>${i + 1}</span>`).join('');
   const lanes = s.positions.map((pos, i) => {
     const h = i + 1;
     const from = opts.from?.[i] ?? pos;
     const won = s.winner === h;
     return `
-      <div class="lane h${h}-lane ${won ? 'won' : ''} ${pos === lead && pos > 0 && !s.winner ? 'leading' : ''}">
+      <div class="lane h${h}-lane ${won ? 'won' : ''} ${pos === lead && pos > 0 && !s.winner ? 'leading' : ''} ${(opts.mine?.[i] ?? 0) > 0 ? 'mine' : ''}">
         <span class="gate h${h}">${h}</span>
         <div class="turf">
-          <div class="runner" style="left: ${runnerLeft(from)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${horseSvg(h)}</div>
+          <div class="runner" style="left: ${runnerLeft(from)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${opts.followers ? followers(s, h) : ''}${horseSvg(h)}</div>
         </div>
         <span class="lane-pos">${pos}</span>
       </div>`;
   }).join('');
   return `
-    <div class="track ${opts.big ? 'large' : ''} ${running ? 'running' : ''}">
+    <div class="track ${opts.big ? 'large' : ''} ${opts.followers ? 'followers-on' : ''} ${running ? 'running' : ''}">
       <div class="ruler"><span class="gate-sp"></span><div class="marks">${marks}</div><span class="lane-pos"></span></div>
       ${lanes}
     </div>`;
