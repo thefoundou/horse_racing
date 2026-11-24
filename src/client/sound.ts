@@ -11,6 +11,16 @@ import { store } from './ui';
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
+// What the voices below play into: the live context, or an offline one (renderOffline).
+let ac: BaseAudioContext | null = null;
+let out: AudioNode | null = null;
+
+function makeNoise(a: BaseAudioContext): AudioBuffer {
+  const buf = a.createBuffer(1, a.sampleRate * 2, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
 let enabled = store.get<boolean>('hr:sound') ?? true;
 
 export const soundOn = () => enabled;
@@ -35,9 +45,10 @@ export function unlockAudio(): void {
     comp.threshold.value = -14;
     comp.ratio.value = 6;
     master.connect(comp).connect(ctx.destination);
-    noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = noise.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noise = makeNoise(ctx);
+    ac = ctx;
+    out = master;
+    loadNeigh(); // fetch the recorded whinny ready for the race
   }
   if (ctx.state === 'suspended') void ctx.resume();
 }
@@ -48,35 +59,35 @@ const ready = () => !!ctx && !!master && enabled && ctx.state === 'running';
 
 /** A burst of filtered noise. */
 function noiseBurst(t: number, dur: number, opts: { type: BiquadFilterType; freq: number; q?: number; gain: number; attack?: number; freqEnd?: number }) {
-  const src = ctx!.createBufferSource();
+  const src = ac!.createBufferSource();
   src.buffer = noise;
   src.loop = true;
-  const f = ctx!.createBiquadFilter();
+  const f = ac!.createBiquadFilter();
   f.type = opts.type;
   f.frequency.setValueAtTime(opts.freq, t);
   if (opts.freqEnd) f.frequency.exponentialRampToValueAtTime(opts.freqEnd, t + dur);
   f.Q.value = opts.q ?? 1;
-  const g = ctx!.createGain();
+  const g = ac!.createGain();
   const a = opts.attack ?? 0.005;
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(opts.gain, t + a);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(master!);
+  src.connect(f).connect(g).connect(out!);
   src.start(t, Math.random() * 1.5);
   src.stop(t + dur + 0.05);
 }
 
 /** A low thump: a hoof on packed dirt. */
 function thump(t: number, gain: number) {
-  const o = ctx!.createOscillator();
+  const o = ac!.createOscillator();
   o.type = 'sine';
   o.frequency.setValueAtTime(110 + Math.random() * 25, t);
   o.frequency.exponentialRampToValueAtTime(45, t + 0.09);
-  const g = ctx!.createGain();
+  const g = ac!.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(gain, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-  o.connect(g).connect(master!);
+  o.connect(g).connect(out!);
   o.start(t);
   o.stop(t + 0.15);
   noiseBurst(t, 0.07, { type: 'lowpass', freq: 700, gain: gain * 0.7 }); // the dirt
@@ -86,27 +97,27 @@ function thump(t: number, gain: number) {
 
 /** A brass note: sawtooth through a filter that opens as the note speaks. */
 function brass(t: number, freq: number, dur: number) {
-  const o = ctx!.createOscillator();
+  const o = ac!.createOscillator();
   o.type = 'sawtooth';
   o.frequency.setValueAtTime(freq * 0.97, t);
   o.frequency.exponentialRampToValueAtTime(freq, t + 0.04); // lip up to pitch
-  const vib = ctx!.createOscillator();
-  const vibGain = ctx!.createGain();
+  const vib = ac!.createOscillator();
+  const vibGain = ac!.createGain();
   vib.frequency.value = 5.5;
   vibGain.gain.value = freq * 0.006;
   vib.connect(vibGain).connect(o.frequency);
-  const f = ctx!.createBiquadFilter();
+  const f = ac!.createBiquadFilter();
   f.type = 'lowpass';
   f.Q.value = 2;
   f.frequency.setValueAtTime(freq * 1.5, t);
   f.frequency.linearRampToValueAtTime(freq * 6, t + 0.05);
   f.frequency.linearRampToValueAtTime(freq * 3.5, t + dur);
-  const g = ctx!.createGain();
+  const g = ac!.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
   g.gain.setValueAtTime(0.2, t + Math.max(0.04, dur - 0.06));
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(f).connect(g).connect(master!);
+  o.connect(f).connect(g).connect(out!);
   o.start(t); vib.start(t);
   o.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
 }
@@ -121,7 +132,7 @@ export function playBugle(): void {
     [E5, 1], [C5, 1], [E5, 1], [G5, 1], [E5, 1], [C5, 3],
     [G4, 1], [C5, 1], [E5, 1], [G5, 1], [E5, 1], [G5, 1], [C6, 6],
   ];
-  let t = ctx!.currentTime + 0.05;
+  let t = ac!.currentTime + 0.05;
   for (const [f, beats] of tune) {
     const dur = beats * e;
     brass(t, f, dur * 0.92);
@@ -138,7 +149,7 @@ export function playBugle(): void {
  */
 export function playGallop(horsesMoving: number, seconds = 1.4): void {
   if (!ready() || horsesMoving <= 0) return;
-  const now = ctx!.currentTime + 0.02;
+  const now = ac!.currentTime + 0.02;
   for (let h = 0; h < Math.min(horsesMoving, 3); h++) {
     const offset = h * 0.07 + Math.random() * 0.03;
     const stride = 0.34 + Math.random() * 0.04;
@@ -156,64 +167,53 @@ export function playGallop(horsesMoving: number, seconds = 1.4): void {
 
 // ---- Now and then: whinnies, nickers, snorts ----------------------------------
 
-/** A whinny: a high, shaking call that rises then falls away. */
+/**
+ * A whinny: a real recording (public domain, see public/sounds/CREDITS.md),
+ * played a little faster or slower each time so repeats don't sound the same.
+ */
+let neigh: AudioBuffer | null = null;
+let neighLoading = false;
+
+function loadNeigh(): void {
+  if (neigh || neighLoading || !ac) return;
+  neighLoading = true;
+  fetch('/sounds/neigh.m4a')
+    .then((r) => r.arrayBuffer())
+    .then((b) => ac!.decodeAudioData(b))
+    .then((buf) => { neigh = buf; })
+    .catch(() => { neighLoading = false; }); // try again next time
+}
+
 function whinny(t: number) {
-  const dur = 1.1 + Math.random() * 0.5;
-  const base = 520 + Math.random() * 160;
-  const o = ctx!.createOscillator();
-  o.type = 'sawtooth';
-  o.frequency.setValueAtTime(base * 0.8, t);
-  o.frequency.linearRampToValueAtTime(base * 1.7, t + 0.18);
-  o.frequency.linearRampToValueAtTime(base * 1.1, t + dur * 0.6);
-  o.frequency.linearRampToValueAtTime(base * 0.6, t + dur);
-  // The shake: fast wobble in pitch and loudness.
-  const lfo = ctx!.createOscillator();
-  lfo.frequency.setValueAtTime(14, t);
-  lfo.frequency.linearRampToValueAtTime(24, t + dur);
-  const pitchWobble = ctx!.createGain();
-  pitchWobble.gain.value = base * 0.12;
-  lfo.connect(pitchWobble).connect(o.frequency);
-  const amp = ctx!.createGain();
-  amp.gain.value = 0.5;
-  const ampWobble = ctx!.createGain();
-  ampWobble.gain.value = 0.45;
-  lfo.connect(ampWobble).connect(amp.gain);
-  // Nasal formants.
-  const f1 = ctx!.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 1300; f1.Q.value = 3;
-  const f2 = ctx!.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 2700; f2.Q.value = 4;
-  const env = ctx!.createGain();
-  env.gain.setValueAtTime(0.0001, t);
-  env.gain.exponentialRampToValueAtTime(0.5, t + 0.06);
-  env.gain.setValueAtTime(0.45, t + dur * 0.7);
-  env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(amp);
-  amp.connect(f1).connect(env);
-  amp.connect(f2).connect(env);
-  env.connect(master!);
-  o.start(t); lfo.start(t);
-  o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
-  noiseBurst(t, dur * 0.8, { type: 'bandpass', freq: 2200, q: 2, gain: 0.05, attack: 0.05 }); // breathiness
+  if (!neigh) { loadNeigh(); return nicker(t); } // not loaded yet: a nicker instead
+  const src = ac!.createBufferSource();
+  src.buffer = neigh;
+  src.playbackRate.value = 0.88 + Math.random() * 0.24; // a different horse each time
+  const g = ac!.createGain();
+  g.gain.value = 0.55 + Math.random() * 0.25;
+  src.connect(g).connect(out!);
+  src.start(t);
 }
 
 /** A low nicker: a soft, rumbling chuckle. */
 function nicker(t: number) {
   const dur = 0.6;
-  const o = ctx!.createOscillator();
+  const o = ac!.createOscillator();
   o.type = 'triangle';
   o.frequency.setValueAtTime(140, t);
   o.frequency.linearRampToValueAtTime(110, t + dur);
-  const trem = ctx!.createOscillator();
+  const trem = ac!.createOscillator();
   trem.frequency.value = 11;
-  const tremGain = ctx!.createGain();
+  const tremGain = ac!.createGain();
   tremGain.gain.value = 0.35;
-  const amp = ctx!.createGain();
+  const amp = ac!.createGain();
   amp.gain.value = 0.4;
   trem.connect(tremGain).connect(amp.gain);
-  const env = ctx!.createGain();
+  const env = ac!.createGain();
   env.gain.setValueAtTime(0.0001, t);
   env.gain.exponentialRampToValueAtTime(0.6, t + 0.04);
   env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(amp).connect(env).connect(master!);
+  o.connect(amp).connect(env).connect(out!);
   o.start(t); trem.start(t);
   o.stop(t + dur + 0.05); trem.stop(t + dur + 0.05);
 }
@@ -232,7 +232,7 @@ export function startRaceAmbience(): void {
   const next = () => {
     ambience = window.setTimeout(() => {
       if (ready()) {
-        const t = ctx!.currentTime + 0.02;
+        const t = ac!.currentTime + 0.02;
         const r = Math.random();
         if (r < 0.45) whinny(t);
         else if (r < 0.75) snort(t);
@@ -253,35 +253,35 @@ export function stopRaceAmbience(): void {
 
 export function playCheer(): void {
   if (!ready()) return;
-  const t = ctx!.currentTime + 0.02;
+  const t = ac!.currentTime + 0.02;
   const dur = 4.5;
   // Many voices at once: noise shaped into an "aah", swelling then fading.
   for (const [freq, q, gain] of [[750, 1.2, 0.5], [1150, 1.4, 0.35], [2500, 2, 0.15]] as const) {
-    const src = ctx!.createBufferSource();
+    const src = ac!.createBufferSource();
     src.buffer = noise; src.loop = true;
-    const f = ctx!.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
-    const g = ctx!.createGain();
+    const f = ac!.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ac!.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + 0.6);
     g.gain.setValueAtTime(gain, t + 2.2);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(master!);
+    src.connect(f).connect(g).connect(out!);
     src.start(t, Math.random()); src.stop(t + dur + 0.1);
   }
   // Whoops and whistles from the stands.
   for (let i = 0; i < 9; i++) {
     const s = t + 0.2 + Math.random() * 2.6;
-    const o = ctx!.createOscillator();
+    const o = ac!.createOscillator();
     o.type = Math.random() < 0.5 ? 'sine' : 'triangle';
     const f0 = 900 + Math.random() * 900;
     o.frequency.setValueAtTime(f0, s);
     o.frequency.exponentialRampToValueAtTime(f0 * (1.4 + Math.random() * 0.6), s + 0.18);
     o.frequency.exponentialRampToValueAtTime(f0 * 0.9, s + 0.45);
-    const g = ctx!.createGain();
+    const g = ac!.createGain();
     g.gain.setValueAtTime(0.0001, s);
     g.gain.exponentialRampToValueAtTime(0.07, s + 0.05);
     g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
-    o.connect(g).connect(master!);
+    o.connect(g).connect(out!);
     o.start(s); o.stop(s + 0.55);
   }
   // Applause: lots of tiny claps.
@@ -289,4 +289,15 @@ export function playCheer(): void {
     const s = t + 0.3 + Math.random() * 3.6;
     noiseBurst(s, 0.035, { type: 'highpass', freq: 1400 + Math.random() * 1200, gain: 0.05 + Math.random() * 0.05 });
   }
+}
+
+/**
+ * Render one of the voices into an offline context (for listening tests and
+ * tuning; not used by the game).
+ */
+export function renderOffline(a: BaseAudioContext, voice: 'nicker' | 'snort', at: number): void {
+  const prev = [ac, out, noise] as const;
+  ac = a; out = a.destination; noise = makeNoise(a);
+  ({ nicker, snort })[voice](at);
+  [ac, out, noise] = prev;
 }
