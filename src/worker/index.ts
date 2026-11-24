@@ -5,6 +5,7 @@
 //   POST /api/rooms            { hostId }  -> { code }   start a lobby
 //   GET  /api/rooms/:code                  -> { exists } check a code
 //   GET  /api/rooms/:code/ws   (WebSocket)               play
+//   GET  /api/rooms/:code/avatars/:playerId -> JPEG     profile photo
 
 import { CODE_ALPHABET, CODE_LENGTH, isRoomCode } from '../shared/protocol';
 
@@ -54,6 +55,20 @@ export default {
     if (parts.length === 4 && parts[3] === 'ws') {
       if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'Expected WebSocket' }, 426);
       return lobby(env, code).fetch(request);
+    }
+
+    if (parts.length === 5 && parts[3] === 'avatars' && request.method === 'GET') {
+      const id = decodeURIComponent(parts[4]).slice(0, 64);
+      const img = await lobby(env, code).avatar(id);
+      if (!img) return json({ error: 'No photo' }, 404);
+      return new Response(img, {
+        headers: {
+          'content-type': 'image/jpeg',
+          'x-content-type-options': 'nosniff',
+          // The URL carries the photo's version, so it never changes.
+          'cache-control': 'private, max-age=31536000, immutable',
+        },
+      });
     }
 
     return json({ error: 'Not found' }, 404);

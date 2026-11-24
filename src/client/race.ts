@@ -21,10 +21,12 @@ export function horseSvg(h: number): string {
       ${leg('fh', 31, mane)}${leg('ff', 66, mane)}
       <path class="tail" d="M22 27 C12 25 6 31 3 43 C9 39 14 37 21 34 Z" fill="${mane}"/>
       <ellipse cx="44" cy="31" rx="25" ry="11" fill="${coat}"/>
+      <path d="M24 28 Q40 19 62 24 Q46 23 28 31 Z" fill="#fff" opacity="0.16"/>
       <path d="M60 26 L72 9 L81 13 L71 37 Z" fill="${coat}"/>
       <path d="M71 7 Q77 2 83 6 L94 15 Q97 19 92 21 L82 19 Q75 17 71 13 Z" fill="${coat}"/>
       <path d="M74 6 L76 -1 L79 5 Z" fill="${coat}"/>
       <path d="M61 25 L72 7 L69 6 L58 23 Z" fill="${mane}"/>
+      <path d="M84 8.5 L92 15.5 Q93.5 17.5 91.5 18 L86.5 12.5 Z" fill="#f6f1e4" opacity="0.9"/>
       <circle cx="81" cy="10" r="1.1" fill="#111"/>
       ${leg('nh', 26, coat)}${leg('nf', 61, coat)}
       <rect class="cloth" x="35" y="25" width="17" height="14" rx="2"/>
@@ -40,19 +42,30 @@ export function horseSvg(h: number): string {
 }
 
 /** The track; `running` makes the horses gallop. */
-export function track(s: PublicState, opts: { big?: boolean } = {}): string {
+/** Where a runner sits for a position: 0 at the gate, the nose on the line at FINISH. */
+const runnerLeft = (pos: number) => {
+  const pct = (Math.min(pos, FINISH) / FINISH) * 100;
+  return `calc(${pct}% - ${pct / 100} * var(--steed-w))`;
+};
+
+/**
+ * The track; `running` makes the horses gallop. Pass `from` (the positions
+ * before the latest roll) and each runner is drawn there with its target in
+ * data-to; slideRunners() then moves them so they glide instead of jumping.
+ */
+export function track(s: PublicState, opts: { big?: boolean; from?: number[] | null } = {}): string {
   const running = s.phase === 'racing' && !s.winner;
   const lead = Math.max(...s.positions);
   const marks = Array.from({ length: FINISH }, (_, i) => `<span>${i + 1}</span>`).join('');
   const lanes = s.positions.map((pos, i) => {
     const h = i + 1;
-    const pct = (Math.min(pos, FINISH) / FINISH) * 100;
+    const from = opts.from?.[i] ?? pos;
     const won = s.winner === h;
     return `
       <div class="lane h${h}-lane ${won ? 'won' : ''} ${pos === lead && pos > 0 && !s.winner ? 'leading' : ''}">
         <span class="gate h${h}">${h}</span>
         <div class="turf">
-          <div class="runner" style="left: calc(${pct}% - ${pct / 100} * var(--steed-w))">${horseSvg(h)}</div>
+          <div class="runner" style="left: ${runnerLeft(from)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${horseSvg(h)}</div>
         </div>
         <span class="lane-pos">${pos}</span>
       </div>`;
@@ -62,6 +75,14 @@ export function track(s: PublicState, opts: { big?: boolean } = {}): string {
       <div class="ruler"><span class="gate-sp"></span><div class="marks">${marks}</div><span class="lane-pos"></span></div>
       ${lanes}
     </div>`;
+}
+
+/** Start the slides set up by track({ from }); call right after rendering. */
+export function slideRunners(root: ParentNode): void {
+  const runners = [...root.querySelectorAll<HTMLElement>('.runner[data-to]')];
+  if (!runners.length) return;
+  runners[0].getBoundingClientRect(); // commit the start position first
+  requestAnimationFrame(() => runners.forEach((el) => { el.style.left = el.dataset.to!; }));
 }
 
 export function dice(roll: number[] | null, big = false): string {

@@ -26,6 +26,8 @@ export interface PublicPlayer {
   bets: Bets | null;
   /** Net result per finished round (null where they sat a round out). */
   history: (number | null)[];
+  /** Profile photo version (bumped on each upload), or null for none. */
+  avatar: number | null;
 }
 
 export interface PublicState {
@@ -65,13 +67,19 @@ export type ClientMsg =
   | { t: 'finish' }
   | { t: 'winner'; horse: number }
   | { t: 'next' }
-  | { t: 'playAgain' };
+  | { t: 'playAgain' }
+  /** A profile photo as a JPEG data URL (the browser crops and shrinks it first). */
+  | { t: 'avatar'; data: string };
 
 export type ServerMsg =
   | { t: 'state'; you: string; state: PublicState }
   | { t: 'error'; message: string; fatal?: boolean };
 
 export const MAX_ROUNDS = 50;
+/** Largest accepted photo, as a data URL (about 110 KB of JPEG). */
+export const MAX_AVATAR_CHARS = 150_000;
+export const avatarUrl = (code: string, playerId: string, version: number) =>
+  `/api/rooms/${code}/avatars/${encodeURIComponent(playerId)}?v=${version}`;
 export const MAX_PLAYERS = 30;
 export const MAX_NAME = 20;
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O

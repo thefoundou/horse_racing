@@ -9,7 +9,7 @@ import {
   tidy, validateBets, type Bets,
 } from '../shared/game';
 import {
-  MAX_NAME, MAX_PLAYERS, MAX_ROUNDS,
+  MAX_AVATAR_CHARS, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS,
   type ClientMsg, type Phase, type PublicState, type RaceMode, type ServerMsg,
 } from '../shared/protocol';
 
@@ -21,6 +21,7 @@ interface Player {
   locked: boolean;
   playing: boolean;
   history: (number | null)[];
+  avatar?: number;
 }
 
 interface State {
@@ -50,6 +51,8 @@ const fail = (message: string): never => { throw new GameError(message); };
 
 export class Lobby extends DurableObject<Env> {
   private state: State | null = null;
+  /** A photo from the message being handled, written by save(). */
+  private pendingAvatar: { id: string; bytes: Uint8Array } | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -73,6 +76,13 @@ export class Lobby extends DurableObject<Env> {
 
   async exists(): Promise<boolean> {
     return this.state !== null;
+  }
+
+  /** A player's profile photo (JPEG bytes), or null. */
+  async avatar(playerId: string): Promise<ArrayBuffer | null> {
+    if (!this.state?.players.some((p) => p.id === playerId)) return null;
+    const bytes = await this.ctx.storage.get<Uint8Array>(`avatar:${playerId}`);
+    return bytes ? (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) : null;
   }
 
   async fetch(): Promise<Response> {
@@ -248,6 +258,23 @@ export class Lobby extends DurableObject<Env> {
         s.round = 0;
         return;
 
+      case 'avatar': {
+        self();
+        const prefix = 'data:image/jpeg;base64,';
+        if (typeof msg.data !== 'string' || !msg.data.startsWith(prefix) || msg.data.length > MAX_AVATAR_CHARS) {
+          fail('That photo could not be used. Try another.');
+        }
+        let bytes: Uint8Array;
+        try {
+          bytes = Uint8Array.from(atob(msg.data.slice(prefix.length)), (c) => c.charCodeAt(0));
+        } catch {
+          return fail('That photo could not be used. Try another.');
+        }
+        if (bytes[0] !== 0xff || bytes[1] !== 0xd8) fail('That photo could not be used. Try another.'); // JPEG magic
+        this.pendingAvatar = { id: me.id, bytes };
+        me.avatar = (me.avatar ?? 0) + 1;
+        return;
+      }
       default:
         fail('Unknown action.');
     }
@@ -290,6 +317,10 @@ export class Lobby extends DurableObject<Env> {
 
   private async save(): Promise<void> {
     if (!this.state) return;
+    if (this.pendingAvatar) {
+      await this.ctx.storage.put(`avatar:${this.pendingAvatar.id}`, this.pendingAvatar.bytes);
+      this.pendingAvatar = null;
+    }
     await this.ctx.storage.put('state', this.state);
     await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
   }
@@ -301,7 +332,7 @@ export class Lobby extends DurableObject<Env> {
       players: s.players.map((p) => {
         const visible = p.id === you || !open;
         return {
-          id: p.id, name: p.name, balance: p.balance, connected: online.has(p.id),
+          id: p.id, name: p.name, balance: p.balance, connected: online.has(p.id), avatar: p.avatar ?? null,
           locked: p.locked, playing: p.playing, history: p.history,
           bets: visible ? p.bets : null, staked: visible ? sum(p.bets) : null,
         };

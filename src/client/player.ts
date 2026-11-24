@@ -4,12 +4,13 @@
 import { HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
 import type { PublicPlayer, PublicState } from '../shared/protocol';
 import { dice, raceStatus, track } from './race';
-import { betsTable, cls, esc, horse, leaderboard, money, oddsText, playerList, r2 } from './ui';
+import { avatar, betsTable, cls, esc, horse, leaderboard, money, oddsText, playerList, r2 } from './ui';
 
 export interface PlayerCtx {
   draft: Bets | null;
   draftText: string[];
   showRace: boolean;
+  slideFrom: number[] | null;
 }
 
 const bigScreen = '<span class="tag tv-tag">big screen</span>';
@@ -18,7 +19,7 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   if (s.phase === 'lobby') return lobby(s, me);
   if (s.phase === 'betting') return betting(s, me, c);
   if (s.phase === 'review') return review(s, me);
-  if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s);
+  if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, c);
   if (s.phase === 'results') return results(s, me);
   return finished(s, me);
 }
@@ -26,7 +27,10 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
 function lobby(s: PublicState, me: PublicPlayer) {
   return `
     <div class="card center">
-      <div class="logo" aria-hidden="true">🏇</div>
+      <button class="avatar-btn" id="changePhoto" aria-label="${me.avatar ? 'Change your photo' : 'Add a photo'}">
+        ${avatar(s.code, me, 'xl')}
+        <span class="avatar-edit">${me.avatar ? 'Change photo' : 'Add a photo'}</span>
+      </button>
       <h2>You're in, ${esc(me.name)}!</h2>
       <p class="muted">You have ${money(START_BALANCE)} to bet. Watch the ${bigScreen}: the game starts from there.</p>
       ${s.hideOdds ? '<p class="note">Odds are hidden until everyone has locked in their bets.</p>' : ''}
@@ -111,11 +115,11 @@ function review(s: PublicState, me: PublicPlayer) {
     <p class="waiting">The race starts on the ${bigScreen}…</p>`;
 }
 
-function race(s: PublicState) {
+function race(s: PublicState, c: PlayerCtx) {
   return `
     <div class="card race">
       <div class="race-top">${dice(s.lastRoll)}<span class="muted small">Roll ${s.rollCount}</span></div>
-      ${track(s)}
+      ${track(s, { from: c.slideFrom })}
       ${raceStatus(s)}
     </div>
     ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;
