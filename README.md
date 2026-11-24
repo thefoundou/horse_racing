@@ -4,7 +4,7 @@ A multiplayer horse-betting party game for phones and laptops, based on the "Hor
 
 ## How to play
 
-1. Someone taps **Start a lobby**. They become the host and get a 4-letter room code (the link `/<CODE>` works too).
+1. Someone taps **Start a lobby**. They become the host and get a 4-letter room code and a **QR code** that others can scan to join (the link `/<CODE>` works too). Tapping the room code at the top of the screen shows the QR code again at any point in the game.
 2. Everyone else enters the code and picks a display name. Each player starts with **$100** of play money.
 3. The host picks the number of rounds and whether to **hide the odds until all bets are in**, then starts the game. Each round:
    - **Betting:** bet any amounts on horses 1–6, up to your balance. Live odds update as people bet, unless the host hid them; then players bet blind, and the odds and pool totals aren't even sent to browsers until betting closes. Other players' bets stay hidden until betting closes. Tap **Lock in** when you're done. You can unlock and change your bets until everyone has locked in. The host can also **Close betting** early (for example, if someone has wandered off).
