@@ -1,0 +1,27 @@
+// Cloudflare deploy config. A Worker (src/worker) runs the multiplayer
+// lobbies, one Durable Object per room code, talking to players over
+// WebSockets. The built site (./dist) is served as static assets.
+// `wrangler deploy` runs the build itself (see "build"), so Cloudflare's Git
+// integration works even with no build command set.
+// "name" must match the Worker's name in the Cloudflare dashboard.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "horse-racing",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-11-01",
+  "build": {
+    "command": "npm run build"
+  },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    // Only the API reaches the Worker; everything else is the static site.
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "LOBBY", "class_name": "Lobby" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }],
+  // Required by `wrangler preview`, which Cloudflare runs for PR branches.
+  "previews": {}
+}
