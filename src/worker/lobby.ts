@@ -10,7 +10,7 @@ import {
 } from '../shared/game';
 import {
   MAX_AVATAR_CHARS, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS,
-  type ClientMsg, type Phase, type PublicState, type RaceMode, type ServerMsg,
+  type ClientMsg, type Phase, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
 } from '../shared/protocol';
 
 interface Player {
@@ -38,6 +38,7 @@ interface State {
   rollCount: number;
   manualFinished: boolean;
   winner: number | null; // 1..6
+  log?: RoundLog[];
 }
 
 interface Attachment { playerId: string | null }
@@ -256,6 +257,7 @@ export class Lobby extends DurableObject<Env> {
         for (const p of s.players) Object.assign(p, { balance: START_BALANCE, history: [], bets: emptyBets() });
         s.phase = 'lobby';
         s.round = 0;
+        s.log = [];
         return;
 
       case 'avatar': {
@@ -309,6 +311,14 @@ export class Lobby extends DurableObject<Env> {
       p.balance = tidy(p.balance + n);
       p.history.push(n);
     }
+    const playing = s.players.filter((p) => p.playing);
+    const pool = sum(allBets.map(sum));
+    const onWinner = sum(allBets.map((b) => b[w]));
+    (s.log ??= []).push({
+      round: s.round, winner: w + 1, mode: s.mode ?? 'manual', rolls: s.rollCount, pool: tidy(pool),
+      winOdds: onWinner > 0 ? tidy(pool / onWinner) : 0,
+      stakes: Object.fromEntries(playing.map((p) => [p.id, [tidy(sum(p.bets)), p.bets[w]]])),
+    });
     s.winner = w + 1;
     s.phase = 'results';
   }
@@ -341,7 +351,7 @@ export class Lobby extends DurableObject<Env> {
       totals: s.phase === 'betting' && s.hideOdds ? null
         : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
       mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount,
-      manualFinished: s.manualFinished, winner: s.winner, hostConnected: online.has(s.hostId),
+      manualFinished: s.manualFinished, winner: s.winner, log: s.log ?? [], hostConnected: online.has(s.hostId),
     };
   }
 
