@@ -8,6 +8,7 @@ import {
   isRoomCode, MAX_NAME, MAX_ROUNDS,
   type ClientMsg, type PublicPlayer, type PublicState, type RaceMode, type ServerMsg,
 } from '../shared/protocol';
+import { joinUrl, qrSvg } from './qr';
 
 const app = document.getElementById('app')!;
 const toastEl = document.getElementById('toast')!;
@@ -153,6 +154,8 @@ interface Room {
   /** Keep the finished race on screen briefly before the results. */
   holdRaceUntil: number;
   lastPhase: string;
+  /** The join QR code overlay is open. */
+  showQr: boolean;
 }
 let room: Room | null = null;
 
@@ -162,7 +165,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, lastPhase: '',
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, lastPhase: '', showQr: false,
   };
   if (identity.name) connect(room);
   else renderNamePrompt(room);
@@ -302,19 +305,45 @@ function renderRoom(r: Room) {
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : 'Lobby';
   render(`
     <header class="bar">
-      <button class="chip code" id="shareCode" title="Share this lobby">${s.code}</button>
+      <button class="chip code" id="showQr" title="Show the join QR code" aria-label="Room ${s.code}: show join QR code">${s.code} <span aria-hidden="true">▦</span></button>
       <span class="round">${roundLabel}</span>
       <span class="balance" title="Your money">${money(me.balance)}</span>
     </header>
     ${offline ? '<div class="offline">Reconnecting…</div>' : ''}
-    <section class="screen">${body}</section>`);
+    <section class="screen">${body}</section>
+    ${r.showQr ? qrOverlay(s.code) : ''}`);
 
-  document.getElementById('shareCode')!.onclick = () => share(s.code);
+  document.getElementById('showQr')!.onclick = () => { r.showQr = true; renderRoom(r); };
+  const closeQr = () => { r.showQr = false; renderRoom(r); };
+  document.getElementById('closeQr')?.addEventListener('click', closeQr);
+  document.getElementById('qrOverlay')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeQr(); });
+  document.getElementById('overlayShare')?.addEventListener('click', () => share(s.code));
   bind(r, s, me);
 }
 
+function joinCard(code: string) {
+  return `
+    <div class="qr" role="img" aria-label="QR code to join lobby ${code}">${qrSvg(joinUrl(code))}</div>
+    <p class="muted">Scan to join, or go to <b>${esc(location.host)}</b> and enter the code.</p>`;
+}
+
+function qrOverlay(code: string) {
+  return `
+    <div class="overlay" id="qrOverlay" role="dialog" aria-modal="true" aria-label="Join this lobby">
+      <div class="card center sheet">
+        <p class="muted">Room code</p>
+        <div class="room-code">${code}</div>
+        ${joinCard(code)}
+        <div class="two">
+          <button class="secondary" id="overlayShare">Share link</button>
+          <button class="primary" id="closeQr">Done</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function share(code: string) {
-  const url = `${location.origin}/${code}`;
+  const url = joinUrl(code);
   if (navigator.share) navigator.share({ title: 'Horse Race', text: `Join my horse race lobby: ${code}`, url }).catch(() => {});
   else navigator.clipboard?.writeText(url).then(() => toast('Link copied'), () => toast(url));
 }
@@ -333,7 +362,7 @@ function lobbyScreen(s: PublicState, isHost: boolean) {
     <div class="card center">
       <p class="muted">Room code</p>
       <div class="room-code">${s.code}</div>
-      <p class="muted">Friends join at <b>${esc(location.host)}</b> with this code.</p>
+      ${joinCard(s.code)}
       <button class="secondary" id="shareBtn">Share link</button>
     </div>
     <div class="card">

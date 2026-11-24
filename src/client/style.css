@@ -82,6 +82,16 @@ details[open].card summary { margin-bottom: 10px; }
 .code-input { text-align: center; font-size: 2rem; letter-spacing: 0.4em; text-transform: uppercase; font-weight: 700; margin-top: 6px; padding-left: calc(14px + 0.4em); }
 .room-code { font-size: 3rem; font-weight: 800; letter-spacing: 0.25em; padding-left: 0.25em; color: var(--accent); }
 
+/* Join QR code: dark modules on white so any phone camera reads it. */
+.qr { width: min(220px, 70vw); margin: 12px auto; padding: 8px; background: #fff; border-radius: 12px; line-height: 0; }
+.qr svg { width: 100%; height: auto; display: block; }
+.overlay {
+  position: fixed; inset: 0; z-index: 20; background: #000b; display: grid; place-items: center;
+  padding: 16px; overflow-y: auto;
+}
+.overlay .sheet { width: 100%; max-width: 360px; margin: 0; }
+.overlay .two { margin-top: 4px; }
+
 /* Header */
 .bar {
   position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
