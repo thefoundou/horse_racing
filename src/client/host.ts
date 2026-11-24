@@ -6,12 +6,13 @@ import { FINISH, horseTotals, sum } from '../shared/game';
 import { MAX_ROUNDS, type PublicState } from '../shared/protocol';
 import { joinUrl, qrSvg } from './qr';
 import { dice, horseSvg, HORSE_NUMBERS, raceStatus, track } from './race';
-import { betsTable, esc, historyTable, leaderboard, money, oddsText } from './ui';
+import { avatar, betsTable, esc, historyTable, leaderboard, money, oddsText } from './ui';
 
 export interface HostCtx {
   autoRoll: boolean;
   manualPick: number | null;
   showRace: boolean;
+  slideFrom: number[] | null;
 }
 
 export function hostScreen(s: PublicState, c: HostCtx): string {
@@ -39,7 +40,7 @@ function lobby(s: PublicState) {
         <div class="card">
           <h2>Players (${n})</h2>
           ${n ? `<div class="name-chips">${s.players.map((p) =>
-            `<span class="name-chip ${p.connected ? '' : 'away'}">${esc(p.name)}</span>`).join('')}</div>`
+            `<span class="name-chip ${p.connected ? '' : 'away'}">${avatar(s.code, p)}${esc(p.name)}</span>`).join('')}</div>`
             : '<p class="muted">Waiting for players to scan in…</p>'}
         </div>
         <div class="card">
@@ -90,7 +91,7 @@ function betting(s: PublicState) {
       </div>
       <div class="name-chips">${s.players.map((p) => `
         <span class="name-chip ${p.connected ? '' : 'away'} ${p.locked ? 'locked' : ''}">
-          ${esc(p.name)} ${!p.playing ? '· sitting out' : p.locked ? '✓' : '…'}
+          ${avatar(s.code, p)}${esc(p.name)} ${!p.playing ? '· sitting out' : p.locked ? '✓' : '…'}
         </span>`).join('')}</div>
     </div>`;
 }
@@ -124,7 +125,7 @@ function race(s: PublicState, c: HostCtx) {
           <button class="secondary" id="auto">${c.autoRoll ? '⏸ Stop' : '⏩ Auto-roll'}</button>
         </div>` : ''}
     </div>
-    ${track(s, { big: true })}
+    ${track(s, { big: true, from: c.slideFrom })}
     ${raceStatus(s)}`;
 }
 

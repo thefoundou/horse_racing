@@ -10,6 +10,8 @@ import {
 import { hostScreen } from './host';
 import { playerScreen } from './player';
 import { joinUrl, qrSvg } from './qr';
+import { horseSvg, slideRunners } from './race';
+import { pickPhoto } from './photo';
 import { app, esc, money, r2, render, store, toast } from './ui';
 
 interface Identity {
@@ -37,9 +39,12 @@ function renderLanding(error = '') {
   render(`
     <section class="landing">
       <div class="hero">
-        <div class="logo" aria-hidden="true">🏇</div>
         <h1>Horse Race</h1>
-        <p>Everyone starts with ${money(START_BALANCE)} of play money. Bet on horses 1–6, race them, richest player wins.</p>
+        <p class="tagline">Place your bets</p>
+        <div class="herd" aria-hidden="true">${horseSvg(1)}${horseSvg(4)}${horseSvg(3)}</div>
+      </div>
+      <div class="card center">
+        <p>Everyone starts with <b>${money(START_BALANCE)}</b> of play money. Bet on horses 1–6, race them, and the richest player wins.</p>
       </div>
       <div class="card">
         <h2>Host a game</h2>
@@ -110,9 +115,13 @@ interface Room {
   manualPick: number | null;
   /** Keep the finished race on screen briefly before the results. */
   holdRaceUntil: number;
+  /** Positions before the latest roll, so the next render can slide from them. */
+  slideFrom: number[] | null;
   lastPhase: string;
   /** The join QR code overlay is open. */
   showQr: boolean;
+  /** A photo chosen before joining, sent once the lobby lets us in. */
+  pendingPhoto: string | null;
 }
 let room: Room | null = null;
 
@@ -122,7 +131,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, lastPhase: '', showQr: false,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, lastPhase: '', showQr: false, pendingPhoto: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -175,13 +184,19 @@ function send(msg: ClientMsg) {
 
 function renderNamePrompt(r: Room, error = '') {
   const last = store.get<string>('hr:lastName') ?? '';
+  // Your photo from last time, if any, so a regular only picks it once.
+  r.pendingPhoto ??= store.get<string>('hr:lastPhoto');
   render(`
     <section class="landing">
       <div class="hero small">
-        <p class="muted">Lobby</p>
-        <div class="room-code">${r.code}</div>
+        <h1>Horse Race</h1>
+        <p class="tagline">Lobby ${r.code}</p>
       </div>
       <form class="card" id="nameForm" autocomplete="off">
+        <button type="button" class="avatar-btn" id="pickPhoto" aria-label="${r.pendingPhoto ? 'Change your photo' : 'Add a photo'}">
+          ${r.pendingPhoto ? `<img class="avatar xl" src="${r.pendingPhoto}" alt="" />` : '<span class="avatar xl empty" aria-hidden="true">📷</span>'}
+          <span class="avatar-edit">${r.pendingPhoto ? 'Change photo' : 'Add a photo for the leaderboard'}</span>
+        </button>
         <h2>Your display name</h2>
         <input id="nameInput" maxlength="${MAX_NAME}" value="${esc(last)}" placeholder="e.g. Lucky Lou" />
         ${error ? `<p class="error">${esc(error)}</p>` : ''}
@@ -193,11 +208,20 @@ function renderNamePrompt(r: Room, error = '') {
   input.focus();
   input.select();
   document.getElementById('home')!.onclick = () => go('/');
+  document.getElementById('pickPhoto')!.onclick = async () => {
+    const photo = await pickPhoto();
+    if (!photo) return;
+    r.pendingPhoto = photo;
+    const name = input.value;
+    renderNamePrompt(r, error);
+    (document.getElementById('nameInput') as HTMLInputElement).value = name;
+  };
   document.getElementById('nameForm')!.onsubmit = (e) => {
     e.preventDefault();
     const name = input.value.trim();
     if (!name) return renderNamePrompt(r, 'Pick a name.');
     store.set('hr:lastName', name);
+    if (r.pendingPhoto) store.set('hr:lastPhoto', r.pendingPhoto);
     r.identity.name = name;
     r.closed = false;
     connect(r);
@@ -223,6 +247,10 @@ function onState(r: Room, s: PublicState, you: string) {
   store.set(identityKey(r.code), r.identity);
 
   const me = s.players.find((p) => p.id === you);
+  if (me && r.pendingPhoto) {
+    if (!me.avatar) send({ t: 'avatar', data: r.pendingPhoto });
+    r.pendingPhoto = null;
+  }
   if (s.phase === 'betting' && me && (r.draftRound !== s.round || prev?.phase !== 'betting' || me.locked)) {
     r.draft = (me.bets ?? Array(HORSES).fill(0)).slice();
     r.draftText = r.draft.map((b) => (b ? String(r2(b)) : ''));
@@ -235,6 +263,7 @@ function onState(r: Room, s: PublicState, you: string) {
   }
   if (s.phase !== 'racing' || s.mode !== 'digital') stopAuto(r);
   if (s.phase !== 'racing') r.manualPick = null;
+  if (prev && prev.round === s.round && prev.positions.join() !== s.positions.join()) r.slideFrom = prev.positions;
   r.lastPhase = s.phase;
   renderRoom(r);
 }
@@ -255,8 +284,8 @@ function renderRoom(r: Room) {
   document.body.classList.toggle('tv', isHost);
 
   let body: string;
-  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace });
-  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace });
+  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom });
+  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom });
   else return; // not joined yet
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
@@ -279,6 +308,8 @@ function renderRoom(r: Room) {
   document.getElementById('closeQr')?.addEventListener('click', closeQr);
   document.getElementById('qrOverlay')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeQr(); });
   document.getElementById('overlayShare')?.addEventListener('click', () => share(s.code));
+  r.slideFrom = null; // slide once; later re-renders draw horses where they are
+  slideRunners(app);
   bind(r, s, me);
 }
 
@@ -310,6 +341,12 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   const on = (id: string, fn: () => void) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('shareBtn', () => share(s.code));
   on('home', () => go('/'));
+  on('changePhoto', async () => {
+    const photo = await pickPhoto();
+    if (!photo) return;
+    store.set('hr:lastPhoto', photo);
+    send({ t: 'avatar', data: photo });
+  });
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));

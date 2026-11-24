@@ -1,7 +1,7 @@
 // Small rendering helpers shared by the host screen and the player phones.
 
 import { START_BALANCE } from '../shared/game';
-import type { PublicPlayer, PublicState } from '../shared/protocol';
+import { avatarUrl, type PublicPlayer, type PublicState } from '../shared/protocol';
 
 export const app = document.getElementById('app')!;
 const toastEl = document.getElementById('toast')!;
@@ -52,11 +52,22 @@ export function render(html: string) {
   }
 }
 
+const INITIAL_BG = ['#c8442f', '#2f5d8a', '#3f7d4a', '#b7832f', '#7a4b8c', '#2f7d7a'];
+
+/** A player's photo, or their initial on a colour picked from their name. */
+export function avatar(code: string, p: Pick<PublicPlayer, 'id' | 'name' | 'avatar'>, extra = '') {
+  if (p.avatar) return `<img class="avatar ${extra}" src="${avatarUrl(code, p.id, p.avatar)}" alt="" />`;
+  let h = 0;
+  for (const ch of p.name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const initial = esc([...p.name.trim()][0]?.toUpperCase() ?? '?');
+  return `<span class="avatar initial ${extra}" style="background:${INITIAL_BG[h % INITIAL_BG.length]}">${initial}</span>`;
+}
+
 export function playerList(s: PublicState, show: (p: PublicPlayer) => string = () => '', you = '') {
   if (!s.players.length) return '<p class="muted">Nobody has joined yet.</p>';
   return `<ul class="players">${s.players.map((p) => `
     <li class="${p.connected ? '' : 'away'} ${p.id === you ? 'me' : ''}">
-      <span class="dot" title="${p.connected ? 'Online' : 'Offline'}"></span>
+      ${avatar(s.code, p)}
       <span class="name">${esc(p.name)}${p.id === you ? ' <span class="tag">you</span>' : ''}</span>
       <span class="aside">${show(p)}</span>
     </li>`).join('')}</ul>`;
@@ -70,6 +81,7 @@ export function leaderboard(s: PublicState, you: string, showLast = true) {
     const last = p.history[p.history.length - 1];
     return `<li class="${p.id === you ? 'me' : ''}">
       <span class="rank">${rank}</span>
+      ${avatar(s.code, p)}
       <span class="name">${esc(p.name)}</span>
       ${showLast ? `<span class="delta ${cls(last ?? 0)}">${last == null ? '–' : money(last, true)}</span>` : ''}
       <span class="bal">${money(p.balance)}</span>
