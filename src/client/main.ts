@@ -120,8 +120,10 @@ interface Room {
   lastPhase: string;
   /** The join QR code overlay is open. */
   showQr: boolean;
-  /** A photo chosen before joining, sent once the lobby lets us in. */
-  pendingPhoto: string | null;
+  /** Just joined with a name: show the photo page before the lobby. */
+  askPhoto: boolean;
+  /** The photo shown on that page (picked now, or remembered from last time). */
+  photoPreview: string | null;
 }
 let room: Room | null = null;
 
@@ -131,7 +133,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, lastPhase: '', showQr: false, pendingPhoto: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, lastPhase: '', showQr: false, askPhoto: false, photoPreview: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -184,8 +186,6 @@ function send(msg: ClientMsg) {
 
 function renderNamePrompt(r: Room, error = '') {
   const last = store.get<string>('hr:lastName') ?? '';
-  // Your photo from last time, if any, so a regular only picks it once.
-  r.pendingPhoto ??= store.get<string>('hr:lastPhoto');
   render(`
     <section class="landing">
       <div class="hero small">
@@ -193,14 +193,10 @@ function renderNamePrompt(r: Room, error = '') {
         <p class="tagline">Lobby ${r.code}</p>
       </div>
       <form class="card" id="nameForm" autocomplete="off">
-        <button type="button" class="avatar-btn" id="pickPhoto" aria-label="${r.pendingPhoto ? 'Change your photo' : 'Add a photo'}">
-          ${r.pendingPhoto ? `<img class="avatar xl" src="${r.pendingPhoto}" alt="" />` : '<span class="avatar xl empty" aria-hidden="true">📷</span>'}
-          <span class="avatar-edit">${r.pendingPhoto ? 'Change photo' : 'Add a photo for the leaderboard'}</span>
-        </button>
         <h2>Your display name</h2>
         <input id="nameInput" maxlength="${MAX_NAME}" value="${esc(last)}" placeholder="e.g. Lucky Lou" />
         ${error ? `<p class="error">${esc(error)}</p>` : ''}
-        <button class="primary big" type="submit">Join lobby</button>
+        <button class="primary big" type="submit">Next</button>
         <button class="link" type="button" id="home">Back</button>
       </form>
     </section>`);
@@ -208,21 +204,14 @@ function renderNamePrompt(r: Room, error = '') {
   input.focus();
   input.select();
   document.getElementById('home')!.onclick = () => go('/');
-  document.getElementById('pickPhoto')!.onclick = async () => {
-    const photo = await pickPhoto();
-    if (!photo) return;
-    r.pendingPhoto = photo;
-    const name = input.value;
-    renderNamePrompt(r, error);
-    (document.getElementById('nameInput') as HTMLInputElement).value = name;
-  };
   document.getElementById('nameForm')!.onsubmit = (e) => {
     e.preventDefault();
     const name = input.value.trim();
     if (!name) return renderNamePrompt(r, 'Pick a name.');
     store.set('hr:lastName', name);
-    if (r.pendingPhoto) store.set('hr:lastPhoto', r.pendingPhoto);
     r.identity.name = name;
+    r.askPhoto = true; // once the lobby lets us in, ask for a photo
+    r.photoPreview = store.get<string>('hr:lastPhoto'); // your photo from last time, if any
     r.closed = false;
     connect(r);
   };
@@ -247,10 +236,6 @@ function onState(r: Room, s: PublicState, you: string) {
   store.set(identityKey(r.code), r.identity);
 
   const me = s.players.find((p) => p.id === you);
-  if (me && r.pendingPhoto) {
-    if (!me.avatar) send({ t: 'avatar', data: r.pendingPhoto });
-    r.pendingPhoto = null;
-  }
   if (s.phase === 'betting' && me && (r.draftRound !== s.round || prev?.phase !== 'betting' || me.locked)) {
     r.draft = (me.bets ?? Array(HORSES).fill(0)).slice();
     r.draftText = r.draft.map((b) => (b ? String(r2(b)) : ''));
@@ -275,11 +260,55 @@ function stopAuto(r: Room) {
 
 // ---- Room screens -------------------------------------------------------
 
+/**
+ * Step two of joining: a page just for the profile photo, so it's hard to
+ * miss. You're already in the lobby; skipping is fine.
+ */
+function renderPhotoStep(r: Room, s: PublicState, me: PublicPlayer) {
+  const preview = r.photoPreview;
+  const started = s.phase !== 'lobby';
+  render(`
+    <section class="landing">
+      <div class="hero small">
+        <h1>Horse Race</h1>
+        <p class="tagline">Lobby ${s.code}</p>
+      </div>
+      <div class="card center photo-step">
+        <h2>Add your photo, ${esc(me.name)}</h2>
+        <p class="muted">It goes on the leaderboard and the big screen, so everyone can see who's winning (and who isn't).</p>
+        <button type="button" class="photo-frame" id="pickPhoto" aria-label="${preview ? 'Choose a different photo' : 'Take or choose a photo'}">
+          ${preview ? `<img src="${preview}" alt="Your photo" />` : '<span aria-hidden="true">📷</span>'}
+        </button>
+        ${preview
+          ? `<button class="primary big" id="usePhoto">Use this photo</button>
+             <button class="secondary big" id="pickAgain">Choose a different photo</button>`
+          : '<button class="primary big" id="pickPhotoBtn">📷 Take or choose a photo</button>'}
+        <button class="link" id="skipPhoto">Skip for now</button>
+        ${started ? '<p class="note">The game has started. Finish up here to place your bets.</p>' : ''}
+      </div>
+    </section>`);
+  const pick = async () => {
+    const photo = await pickPhoto();
+    if (!photo) return;
+    r.photoPreview = photo;
+    renderRoom(r);
+  };
+  const done = () => { r.askPhoto = false; r.photoPreview = null; renderRoom(r); };
+  for (const id of ['pickPhoto', 'pickPhotoBtn', 'pickAgain']) document.getElementById(id)?.addEventListener('click', pick);
+  document.getElementById('skipPhoto')!.onclick = done;
+  document.getElementById('usePhoto')?.addEventListener('click', () => {
+    store.set('hr:lastPhoto', preview);
+    send({ t: 'avatar', data: preview! });
+    done();
+  });
+}
+
 function renderRoom(r: Room) {
   const s = r.state!;
   const isHost = s.hostId === r.you;
   const me = s.players.find((p) => p.id === r.you);
   const offline = r.ws?.readyState !== WebSocket.OPEN;
+  if (r.askPhoto && me && !isHost) return renderPhotoStep(r, s, me);
   const showRace = s.phase === 'racing' || (s.phase === 'results' && Date.now() < r.holdRaceUntil);
   document.body.classList.toggle('tv', isHost);
 

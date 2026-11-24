@@ -348,3 +348,14 @@ body.tv .banner { font-size: clamp(1.4rem, 2.4vw, 2.4rem); padding: 16px; }
 .winner-horse { background: linear-gradient(var(--sky) 72%, var(--turf-a) 72%); border-radius: 4px; padding: 12px 16px 4px; width: clamp(150px, 18vw, 250px); animation: victory 0.6s ease-in-out infinite alternate; }
 .winner-title { font-family: var(--display); font-size: clamp(2.4rem, 4.6vw, 4.2rem); text-transform: uppercase; letter-spacing: 0.06em; }
 .tv-tag { background: var(--ink); color: var(--paper); }
+
+/* Joining, step two: a page just for the profile photo. */
+.photo-step h2 { font-size: 1.3rem; }
+.photo-frame {
+  display: grid; place-items: center; width: min(220px, 60vw); aspect-ratio: 1; margin: 14px auto 4px; padding: 0;
+  border-radius: 50%; overflow: hidden; background: var(--paper-2); border: 3px dashed var(--muted);
+  font-size: 4.5rem; text-transform: none; letter-spacing: 0;
+}
+.photo-frame:has(img) { border: 4px solid var(--paper); box-shadow: 0 0 0 2px var(--line), 0 8px 22px #1f2b2e44; }
+.photo-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-step .secondary.big { margin-top: 10px; }
