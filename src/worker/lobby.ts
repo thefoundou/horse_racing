@@ -5,7 +5,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-  applyRoll, emptyBets, HORSES, horseTotals, net, raceWinner, rollDice, START_BALANCE, sum,
+  applyRoll, cents, emptyBets, HORSES, horseTotals, net, raceWinner, rollDice, START_BALANCE, sum,
   tidy, validateBets, type Bets,
 } from '../shared/game';
 import {
@@ -199,11 +199,18 @@ export class Lobby extends DurableObject<Env> {
         me.bets = bets as Bets;
         return;
       }
-      case 'lock':
+      case 'lock': {
         self(); phase('betting');
         if (!me.playing) fail("You're sitting this round out.");
+        // Lock exactly what the player sees: if those bets aren't valid, stay unlocked.
+        if (msg.bets !== undefined) {
+          const bets = validateBets(msg.bets, me.balance);
+          if (typeof bets === 'string') fail(bets);
+          me.bets = bets as Bets;
+        }
         me.locked = true;
         return this.checkAllLocked(s);
+      }
 
       case 'unlock':
         self(); phase('betting');
@@ -307,8 +314,9 @@ export class Lobby extends DurableObject<Env> {
     const allBets = s.players.filter((p) => p.playing).map((p) => p.bets);
     for (const p of s.players) {
       if (!p.playing) { p.history.push(null); continue; }
-      const n = tidy(net(p.bets, allBets, w));
-      p.balance = tidy(p.balance + n);
+      // Whole cents, so a balance shown as $94.67 really is $94.67 (and can all go on one horse).
+      const n = cents(net(p.bets, allBets, w));
+      p.balance = cents(p.balance + n);
       p.history.push(n);
     }
     const playing = s.players.filter((p) => p.playing);

@@ -76,7 +76,8 @@ export type ClientMsg =
   | { t: 'config'; rounds?: number; hideOdds?: boolean }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }
-  | { t: 'lock' }
+  /** Lock in; `bets` (what's on screen) are checked and saved in the same step. */
+  | { t: 'lock'; bets?: Bets }
   | { t: 'unlock' }
   | { t: 'closeBetting' }
   | { t: 'race'; mode: RaceMode }

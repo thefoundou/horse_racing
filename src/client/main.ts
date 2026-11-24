@@ -8,12 +8,13 @@ import {
   type ClientMsg, type PublicPlayer, type PublicState, type RaceMode, type ServerMsg,
 } from '../shared/protocol';
 import { hostScreen } from './host';
-import { playerScreen } from './player';
+import { bettingKey, patchBetting, playerScreen } from './player';
 import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
 import { app, esc, money, r2, render, store, toast } from './ui';
+import { floorCents } from '../shared/game';
 
 interface Identity {
   playerId: string;
@@ -127,9 +128,14 @@ interface Room {
   askPhoto: boolean;
   /** The photo shown on that page (picked now, or remembered from last time). */
   photoPreview: string | null;
+  /** A photo waiting to go: kept until the lobby confirms it (phones drop the connection while the camera is open). */
+  photoOutbox: { data: string; version: number; timer: number } | null;
 }
 let room: Room | null = null;
 const FINAL_SHOWN = Number.MAX_SAFE_INTEGER;
+
+/** Set while a player still has the photo page to see (survives the phone reloading the page). */
+const askPhotoKey = (code: string) => `hr:askPhoto:${code}`;
 
 function enterRoom(code: string) {
   if (room?.code === code) return;
@@ -137,7 +143,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: false, photoPreview: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -160,6 +166,7 @@ function connect(r: Room) {
   ws.onopen = () => {
     r.retries = 0;
     send({ t: 'hello', playerId: r.identity.playerId, name: r.identity.name ?? '' });
+    if (r.photoOutbox) ws.send(JSON.stringify({ t: 'avatar', data: r.photoOutbox.data }));
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data as string) as ServerMsg;
@@ -188,6 +195,34 @@ function send(msg: ClientMsg) {
   else toast('Reconnecting…');
 }
 
+/**
+ * Upload a profile photo and keep trying until the lobby confirms it. Taking
+ * or picking a photo sends the page to the background, and phones often drop
+ * (or silently kill) the connection meanwhile.
+ */
+function sendPhoto(r: Room, data: string) {
+  const me = r.state?.players.find((p) => p.id === r.you);
+  if (r.photoOutbox) clearTimeout(r.photoOutbox.timer);
+  const attempt = (tries: number) => {
+    if (r.ws?.readyState === WebSocket.OPEN) r.ws.send(JSON.stringify({ t: 'avatar', data }));
+    const timer = window.setTimeout(() => {
+      if (!r.photoOutbox || r.closed) return;
+      if (tries >= 4) { r.photoOutbox = null; toast("Couldn't save your photo. Try again from the lobby."); return; }
+      r.ws?.close(); // probably a dead connection: reconnect (which resends) and check again
+      attempt(tries + 1);
+    }, 5000);
+    r.photoOutbox = { data, version: me?.avatar ?? 0, timer };
+  };
+  attempt(0);
+}
+
+// Coming back from the camera or another app: reconnect at once rather than waiting out the backoff.
+document.addEventListener('visibilitychange', () => {
+  const r = room;
+  if (document.visibilityState !== 'visible' || !r || r.closed || !r.identity.name && !r.identity.host) return;
+  if (r.ws?.readyState !== WebSocket.OPEN && r.ws?.readyState !== WebSocket.CONNECTING) { r.retries = 0; connect(r); }
+});
+
 function renderNamePrompt(r: Room, error = '') {
   const last = store.get<string>('hr:lastName') ?? '';
   render(`
@@ -215,6 +250,7 @@ function renderNamePrompt(r: Room, error = '') {
     store.set('hr:lastName', name);
     r.identity.name = name;
     r.askPhoto = true; // once the lobby lets us in, ask for a photo
+    store.set(askPhotoKey(r.code), true);
     r.photoPreview = store.get<string>('hr:lastPhoto'); // your photo from last time, if any
     r.closed = false;
     connect(r);
@@ -240,6 +276,10 @@ function onState(r: Room, s: PublicState, you: string) {
   store.set(identityKey(r.code), r.identity);
 
   const me = s.players.find((p) => p.id === you);
+  if (me && r.photoOutbox && (me.avatar ?? 0) > r.photoOutbox.version) {
+    clearTimeout(r.photoOutbox.timer); // the lobby has the photo
+    r.photoOutbox = null;
+  }
   if (s.phase === 'betting' && me && (r.draftRound !== s.round || prev?.phase !== 'betting' || me.locked)) {
     r.draft = (me.bets ?? Array(HORSES).fill(0)).slice();
     r.draftText = r.draft.map((b) => (b ? String(r2(b)) : ''));
@@ -297,12 +337,12 @@ function renderPhotoStep(r: Room, s: PublicState, me: PublicPlayer) {
     r.photoPreview = photo;
     renderRoom(r);
   };
-  const done = () => { r.askPhoto = false; r.photoPreview = null; renderRoom(r); };
+  const done = () => { r.askPhoto = false; r.photoPreview = null; store.set(askPhotoKey(r.code), false); renderRoom(r); };
   for (const id of ['pickPhoto', 'pickPhotoBtn', 'pickAgain']) document.getElementById(id)?.addEventListener('click', pick);
   document.getElementById('skipPhoto')!.onclick = done;
   document.getElementById('usePhoto')?.addEventListener('click', () => {
     store.set('hr:lastPhoto', preview);
-    send({ t: 'avatar', data: preview! });
+    sendPhoto(r, preview!);
     done();
   });
 }
@@ -313,6 +353,15 @@ function renderRoom(r: Room) {
   const me = s.players.find((p) => p.id === r.you);
   const offline = r.ws?.readyState !== WebSocket.OPEN;
   if (r.askPhoto && me && !isHost) return renderPhotoStep(r, s, me);
+  // While betting, patch the numbers in place rather than rebuilding the page,
+  // so the box you're typing in is never swapped out under your fingers.
+  if (!isHost && me && s.phase === 'betting' && !offline && !r.showQr && !document.getElementById('reconnecting')) {
+    const form = document.getElementById('betForm');
+    if (form && form.dataset.key === bettingKey(s, me)) {
+      patchBetting(s, me, { draft: r.draft, draftText: r.draftText, showRace: false, slideFrom: null, celebrate: false });
+      return;
+    }
+  }
   const showRace = s.phase === 'racing' || (s.phase === 'results' && Date.now() < r.holdRaceUntil);
   document.body.classList.toggle('tv', isHost);
   if (s.phase === 'lobby') r.celebratedRound = -1; // play again restarts the rounds
@@ -335,7 +384,7 @@ function renderRoom(r: Room) {
       <span class="round">${roundLabel}</span>
       ${right}
     </header>
-    ${offline ? '<div class="offline">Reconnecting…</div>' : ''}
+    ${offline ? '<div class="offline" id="reconnecting">Reconnecting…</div>' : ''}
     ${!isHost && !s.hostConnected ? '<div class="offline">The big screen is offline.</div>' : ''}
     <section class="screen">${body}</section>
     ${r.showQr ? qrOverlay(s.code) : ''}`);
@@ -386,14 +435,16 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
     const photo = await pickPhoto();
     if (!photo) return;
     store.set('hr:lastPhoto', photo);
-    send({ t: 'avatar', data: photo });
+    sendPhoto(r, photo);
   });
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));
   const hide = document.getElementById('hideOdds') as HTMLInputElement | null;
   if (hide) hide.onchange = () => send({ t: 'config', hideOdds: hide.checked });
-  on('lock', () => { flushBets(r); send({ t: 'lock' }); });
+  // Lock in exactly what's on screen: the bets travel with the lock, and if
+  // they aren't valid the lobby says so and you stay unlocked.
+  on('lock', () => { clearTimeout(r.sendTimer); if (r.draft) send({ t: 'lock', bets: r.draft }); });
   on('unlock', () => send({ t: 'unlock' }));
   on('closeBetting', () => {
     if (confirm('Close betting for everyone? Bets not locked in yet are used as they are.')) { flushBets(r); send({ t: 'closeBetting' }); }
@@ -417,29 +468,31 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
 
   if (s.phase === 'betting' && me && me.playing && !me.locked && r.draft) {
     const draft = r.draft;
-    const otherStake = (h: number) => sum(draft) - draft[h];
+    // The most you can put on horse h, in whole cents (never rounding up past your balance).
+    const maxFor = (h: number) => Math.max(0, floorCents(me.balance - (sum(draft) - draft[h])));
+    const changed = () => { queueBets(r); renderRoom(r); }; // renderRoom patches; it won't replace the inputs
     app.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((b) => {
       b.onclick = () => {
         const h = Number(b.dataset.step), d = Number(b.dataset.d);
-        const max = me.balance - otherStake(h);
-        draft[h] = r2(Math.max(0, Math.min(max, draft[h] + d)));
+        draft[h] = r2(Math.max(0, Math.min(maxFor(h), draft[h] + d)));
         r.draftText[h] = draft[h] ? String(draft[h]) : '';
-        queueBets(r);
-        renderRoom(r);
+        const input = document.getElementById(`bet${h}`) as HTMLInputElement | null;
+        if (input) input.value = r.draftText[h];
+        changed();
       };
     });
     app.querySelectorAll<HTMLInputElement>('[data-bet]').forEach((inp) => {
       inp.oninput = () => {
         const h = Number(inp.dataset.bet);
-        const cleaned = inp.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
-        let v = cleaned === '' || cleaned === '.' ? 0 : Number(cleaned);
-        const max = me.balance - otherStake(h);
-        let text = cleaned;
-        if (v > max) { v = r2(max); text = String(v); toast(`You only have ${money(max)} left to bet.`); }
+        // Digits and one decimal point, at most two decimal places.
+        let text = inp.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/(\.\d\d)\d+/, '$1');
+        let v = text === '' || text === '.' ? 0 : Number(text);
+        const max = maxFor(h);
+        if (v > max) { v = max; text = String(max); toast(`You only have ${money(max)} left to bet.`); }
         draft[h] = r2(v);
         r.draftText[h] = text;
-        queueBets(r);
-        renderRoom(r);
+        if (inp.value !== text) inp.value = text;
+        changed();
       };
     });
   }
