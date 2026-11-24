@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankChanges, roundAwards, streak } from './awards';
+import { rankChanges, roundAwards, streak, streakBadge } from './awards';
 import type { PublicPlayer, PublicState } from './protocol';
 
 function player(id: string, balance: number, history: (number | null)[], bets: number[] | null): PublicPlayer {
@@ -13,7 +13,7 @@ function state(players: PublicPlayer[], winner: number): PublicState {
   return {
     code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, hideOdds: false, round: players[0].history.length,
     players, totals: null, mode: 'manual', positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0,
-    manualFinished: true, winner, hostConnected: true,
+    manualFinished: true, winner, log: [], hostConnected: true,
   };
 }
 
@@ -59,8 +59,11 @@ describe('roundAwards', () => {
     const idle = player('idle', 100, [0], [0, 0, 0, 0, 0, 0]);
     const r = roundAwards(state([hot, cold, allin, hedge, idle], 1));
     const got = ids(r.awards);
-    expect(got).toContain('hot:hot');
-    expect(got).toContain('cold:cold');
+    // Streaks show on the leaderboard instead of as badges.
+    expect(got.some((g) => g.endsWith(':hot') || g.endsWith(':cold'))).toBe(false);
+    expect(streakBadge(hot)).toMatchObject({ emoji: '🔥', count: 3 });
+    expect(streakBadge(cold)).toMatchObject({ emoji: '🥶', count: 3 });
+    expect(streakBadge(idle)).toBeNull();
     expect(got).toContain('allin:allin');
     expect(got).toContain('allin:busted');
     expect(got).toContain('hedge:hedge');

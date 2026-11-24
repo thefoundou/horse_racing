@@ -127,6 +127,7 @@ interface Room {
   pendingPhoto: string | null;
 }
 let room: Room | null = null;
+const FINAL_SHOWN = Number.MAX_SAFE_INTEGER;
 
 function enterRoom(code: string) {
   if (room?.code === code) return;
@@ -286,7 +287,9 @@ function renderRoom(r: Room) {
   const showRace = s.phase === 'racing' || (s.phase === 'results' && Date.now() < r.holdRaceUntil);
   document.body.classList.toggle('tv', isHost);
   if (s.phase === 'lobby') r.celebratedRound = -1; // play again restarts the rounds
-  const celebrate = s.phase === 'results' && !showRace && r.celebratedRound !== s.round;
+  // Play each round's celebration, and the final recap, once.
+  const celebrate = (s.phase === 'results' && !showRace && r.celebratedRound !== s.round)
+    || (s.phase === 'finished' && r.celebratedRound !== FINAL_SHOWN);
 
   let body: string;
   if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, celebrate });
@@ -315,7 +318,10 @@ function renderRoom(r: Room) {
   document.getElementById('overlayShare')?.addEventListener('click', () => share(s.code));
   r.slideFrom = null; // slide once; later re-renders draw horses where they are
   slideRunners(app);
-  if (celebrate) { r.celebratedRound = s.round; runCountUps(app, s.players.length); }
+  if (celebrate) {
+    r.celebratedRound = s.phase === 'finished' ? FINAL_SHOWN : s.round;
+    if (s.phase === 'results') runCountUps(app, s.players.length);
+  }
   bind(r, s, me);
 }
 

@@ -30,6 +30,21 @@ export interface PublicPlayer {
   avatar: number | null;
 }
 
+/** What happened in one finished round, kept for the end-of-game recap. */
+export interface RoundLog {
+  round: number;
+  /** Winning horse, 1..6. */
+  winner: number;
+  mode: RaceMode;
+  /** Dice rolls it took (digital races). */
+  rolls: number;
+  pool: number;
+  /** Pool ÷ money on the winner; 0 if nobody backed it. */
+  winOdds: number;
+  /** Per player who played: [total staked, staked on the winner]. */
+  stakes: Record<string, [number, number]>;
+}
+
 export interface PublicState {
   code: string;
   hostId: string;
@@ -50,6 +65,8 @@ export interface PublicState {
   manualFinished: boolean;
   /** Winning horse, 1..6. */
   winner: number | null;
+  /** Every finished round so far. */
+  log: RoundLog[];
   /** Is the host's big screen connected? (The host runs the game but doesn't play.) */
   hostConnected: boolean;
 }

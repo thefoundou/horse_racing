@@ -2,7 +2,7 @@
 // and the biggest loser (a rain cloud), award badges, and a leaderboard that
 // slides in in the old order and then shuffles into the new one.
 
-import { rankChanges, type Award, type RoundAwards, type Spotlight } from '../shared/awards';
+import { rankChanges, streakBadge, type Award, type RoundAwards, type Spotlight } from '../shared/awards';
 import type { PublicState } from '../shared/protocol';
 import { avatar, cls, esc, money } from './ui';
 
@@ -89,6 +89,12 @@ export function awardChips(s: PublicState, awards: Award[], opts: { only?: strin
   }).join('')}</div>`;
 }
 
+/** 🔥3 or 🥶2 beside a name while a player is on a run. */
+export function streakTag(p: Parameters<typeof streakBadge>[0]): string {
+  const b = streakBadge(p);
+  return b ? ` <span class="streak ${b.tone}" title="${b.label}" aria-label="${b.label}">${b.emoji}${b.count}</span>` : '';
+}
+
 /**
  * The leaderboard after a round. With `animate`, rows slide in from the left
  * in the old order, then move to their new places while the balances count
@@ -107,7 +113,7 @@ export function liveLeaderboard(s: PublicState, you: string, opts: { animate: bo
       <li class="${p.id === you ? 'me' : ''}" style="--i:${oldIndex.get(p.id)};--n:${i};--shift:${oldIndex.get(p.id)! - i}">
         <span class="rank">${after.get(p.id)! + 1}</span>
         ${avatar(s.code, p)}
-        <span class="name">${esc(p.name)}</span>
+        <span class="name">${esc(p.name)}${streakTag(p)}</span>
         ${arrow}
         <span class="delta ${cls(last ?? 0)}">${last == null ? '–' : money(last, true)}</span>
         <span class="bal"${opts.animate ? ` data-count-from="${prevBal}" data-count-to="${p.balance}"` : ''}>${money(opts.animate ? prevBal : p.balance)}</span>
