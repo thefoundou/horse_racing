@@ -48,6 +48,7 @@ export function unlockAudio(): void {
     noise = makeNoise(ctx);
     ac = ctx;
     out = master;
+    loadNeigh(); // fetch the recorded whinny ready for the race
   }
   if (ctx.state === 'suspended') void ctx.resume();
 }
@@ -167,90 +168,31 @@ export function playGallop(horsesMoving: number, seconds = 1.4): void {
 // ---- Now and then: whinnies, nickers, snorts ----------------------------------
 
 /**
- * A whinny. What makes it a horse rather than a trumpet:
- * - two voices at once (horses really do this): a high, thin squeal and a
- *   low rough voice underneath;
- * - soft tones (sine and triangle), not a buzzy sawtooth, with lots of
- *   breath mixed in;
- * - a wobbly, uneven pitch that leaps up, shakes as it falls, then breaks
- *   into slowing "hee-hee-huh-huh" pulses;
- * - the loudness pulsing with that shake.
+ * A whinny: a real recording (public domain, see public/sounds/CREDITS.md),
+ * played a little faster or slower each time so repeats don't sound the same.
  */
+let neigh: AudioBuffer | null = null;
+let neighLoading = false;
+
+function loadNeigh(): void {
+  if (neigh || neighLoading || !ac) return;
+  neighLoading = true;
+  fetch('/sounds/neigh.m4a')
+    .then((r) => r.arrayBuffer())
+    .then((b) => ac!.decodeAudioData(b))
+    .then((buf) => { neigh = buf; })
+    .catch(() => { neighLoading = false; }); // try again next time
+}
+
 function whinny(t: number) {
-  const a = ac!;
-  const dur = 1.5 + Math.random() * 0.5;
-  const top = 1050 + Math.random() * 250; // peak of the squeal (Hz)
-  const N = 240;
-  const pitch = new Float32Array(N), low = new Float32Array(N), amp = new Float32Array(N);
-  let wobble = 0, phase = 0;
-  for (let i = 0; i < N; i++) {
-    const x = i / (N - 1); // 0..1 through the call
-    // The shape of the call: leap up, hold and shake, then fall away.
-    const contour = x < 0.12 ? 0.62 + 0.38 * (x / 0.12)
-      : x < 0.55 ? 1 - 0.18 * ((x - 0.12) / 0.43)
-      : 0.82 - 0.5 * ((x - 0.55) / 0.45);
-    // The shake: fast at first, slowing into separate pulses at the end.
-    const rate = 15 - 7 * x;
-    phase += (rate * dur) / N;
-    const shake = Math.sin(2 * Math.PI * phase);
-    wobble += (Math.random() - 0.5) * 0.02; // a little unsteadiness
-    wobble *= 0.94;
-    pitch[i] = top * contour * (1 + 0.06 * shake + wobble);
-    low[i] = pitch[i] * 0.36;
-    // Pulsing loudness that gets choppier towards the end.
-    const depth = 0.35 + 0.55 * x;
-    const pulse = 1 - depth * (0.5 - 0.5 * shake);
-    const env = Math.min(1, x / 0.04) * (x > 0.85 ? (1 - x) / 0.15 : 1);
-    amp[i] = Math.max(0.0001, env * pulse);
-  }
-
-  const shaper = a.createGain(); // the pulsing loudness, shared by every part
-  shaper.gain.value = 0;
-  shaper.gain.setValueCurveAtTime(amp, t, dur);
-
-  // The high squeal: a sine with a little triangle for edge.
-  const hi = a.createOscillator(); hi.type = 'sine';
-  const hi2 = a.createOscillator(); hi2.type = 'triangle';
-  hi.frequency.setValueCurveAtTime(pitch, t, dur);
-  hi2.frequency.setValueCurveAtTime(pitch, t, dur);
-  const hiGain = a.createGain(); hiGain.gain.value = 0.32;
-  const hi2Gain = a.createGain(); hi2Gain.gain.value = 0.2;
-  hi.connect(hiGain).connect(shaper);
-  hi2.connect(hi2Gain).connect(shaper);
-
-  // The low rough voice underneath, softened so it doesn't buzz.
-  const lo = a.createOscillator(); lo.type = 'triangle';
-  lo.frequency.setValueCurveAtTime(low, t, dur);
-  const loF = a.createBiquadFilter(); loF.type = 'lowpass'; loF.frequency.value = 1200; loF.Q.value = 0.5;
-  const loGain = a.createGain(); loGain.gain.value = 0.22;
-  lo.connect(loF).connect(loGain).connect(shaper);
-
-  // Breath: air rushing through the nose and throat, pulsing with the call.
-  const br = a.createBufferSource(); br.buffer = noise; br.loop = true;
-  const brF = a.createBiquadFilter(); brF.type = 'bandpass'; brF.frequency.value = 2000; brF.Q.value = 0.45;
-  const brGain = a.createGain(); brGain.gain.value = 0.5;
-  br.connect(brF).connect(brGain).connect(shaper);
-
-  // Roughness: a fast, uneven flutter (the gravel in a horse's voice).
-  const rough = a.createGain(); rough.gain.value = 0.75;
-  const flutter = a.createOscillator(); flutter.type = 'triangle';
-  flutter.frequency.setValueAtTime(34 + Math.random() * 10, t);
-  flutter.frequency.linearRampToValueAtTime(48 + Math.random() * 10, t + dur);
-  const flutterDepth = a.createGain(); flutterDepth.gain.value = 0.3;
-  flutter.connect(flutterDepth).connect(rough.gain);
-  flutter.start(t); flutter.stop(t + dur + 0.05);
-
-  // A gentle "nasal" colour, and nothing too shrill or too boomy.
-  const nasal = a.createBiquadFilter(); nasal.type = 'peaking'; nasal.frequency.value = 1500; nasal.gain.value = 5; nasal.Q.value = 1;
-  const hp = a.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 180;
-  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
-  const level = a.createGain(); level.gain.value = 0.35; // about as loud as the other sounds
-  shaper.connect(rough).connect(nasal).connect(hp).connect(lp).connect(level).connect(out!);
-
-  for (const src of [hi, hi2, lo]) { src.start(t); src.stop(t + dur + 0.05); }
-  br.start(t, Math.random()); br.stop(t + dur + 0.05);
-  // A snort of breath to finish, as horses often do.
-  noiseBurst(t + dur + 0.05, 0.16, { type: 'bandpass', freq: 600, q: 1.2, gain: 0.18, attack: 0.01, freqEnd: 380 });
+  if (!neigh) { loadNeigh(); return nicker(t); } // not loaded yet: a nicker instead
+  const src = ac!.createBufferSource();
+  src.buffer = neigh;
+  src.playbackRate.value = 0.88 + Math.random() * 0.24; // a different horse each time
+  const g = ac!.createGain();
+  g.gain.value = 0.55 + Math.random() * 0.25;
+  src.connect(g).connect(out!);
+  src.start(t);
 }
 
 /** A low nicker: a soft, rumbling chuckle. */
@@ -353,9 +295,9 @@ export function playCheer(): void {
  * Render one of the voices into an offline context (for listening tests and
  * tuning; not used by the game).
  */
-export function renderOffline(a: BaseAudioContext, voice: 'whinny' | 'nicker' | 'snort', at: number): void {
+export function renderOffline(a: BaseAudioContext, voice: 'nicker' | 'snort', at: number): void {
   const prev = [ac, out, noise] as const;
   ac = a; out = a.destination; noise = makeNoise(a);
-  ({ whinny, nicker, snort })[voice](at);
+  ({ nicker, snort })[voice](at);
   [ac, out, noise] = prev;
 }
