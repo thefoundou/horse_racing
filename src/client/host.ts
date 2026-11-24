@@ -131,7 +131,7 @@ function race(s: PublicState, c: HostCtx) {
           <button class="secondary" id="auto">${c.autoRoll ? '⏸ Stop' : '⏩ Auto-roll'}</button>
         </div>` : ''}
     </div>
-    ${track(s, { big: true, from: c.slideFrom })}
+    ${track(s, { big: true, from: c.slideFrom, followers: true })}
     ${raceStatus(s)}`;
 }
 
