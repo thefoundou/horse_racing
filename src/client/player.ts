@@ -3,7 +3,7 @@
 
 import { floorCents, HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
 import type { PublicPlayer, PublicState } from '../shared/protocol';
-import { dice, raceStatus, track } from './race';
+import { dice, photoFinish, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
 import { gameRecap } from '../shared/recap';
 import { finalLeaderboard, moments, podium } from './recap-view';
@@ -15,6 +15,7 @@ export interface PlayerCtx {
   draftText: string[];
   showRace: boolean;
   slideFrom: number[] | null;
+  closeUp: boolean;
   celebrate: boolean;
 }
 
@@ -38,7 +39,7 @@ function lobby(s: PublicState, me: PublicPlayer) {
       </button>
       <h2>You're in, ${esc(me.name)}!</h2>
       <p class="muted">You have ${money(START_BALANCE)} to bet. Watch the ${bigScreen}: the game starts from there.</p>
-      ${s.hideOdds ? '<p class="note">Odds are hidden until everyone has locked in their bets.</p>' : ''}
+      <p class="note">Odds stay hidden until everyone has locked in their bets.</p>
     </div>
     <div class="card">
       <h2>Players (${s.players.length})</h2>
@@ -98,7 +99,6 @@ function betting(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
     <div class="bet-summary">
       <div><span class="muted small">Staked</span><b id="sumStaked">${money(m.staked)}</b></div>
       <div><span class="muted small">Left</span><b id="sumLeft">${money(m.left)}</b></div>
-      <div><span class="muted small">Pool</span><b id="sumPool">${m.hidden ? '?' : money(m.pool)}</b></div>
     </div>
     <div class="bet-grid">${cards}</div>
     ${m.hidden ? '<p class="note">Odds are hidden until everyone has locked in.</p>' : ''}
@@ -128,7 +128,6 @@ export function patchBetting(s: PublicState, me: PublicPlayer, c: PlayerCtx): vo
   }
   set('sumStaked', money(m.staked));
   set('sumLeft', money(m.left));
-  if (!m.hidden) set('sumPool', money(m.pool));
   set('lock', `Lock in ${money(m.staked)}`);
   set('waitingOn', waitingText(m.waitingOn));
   const status = document.getElementById('betStatus');
@@ -164,6 +163,13 @@ function review(s: PublicState, me: PublicPlayer) {
 
 function race(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
   const backed = (me.bets ?? []).some((b) => b > 0);
+  if (s.photo && c.closeUp) {
+    const inIt = s.photo.horses.some((h) => (me.bets?.[h - 1] ?? 0) > 0);
+    return `
+      ${photoFinish(s, { mine: me.bets })}
+      ${inIt && !s.winner ? '<p class="mine-note">✨ Your horse is in the photo!</p>' : ''}
+      ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;
+  }
   return `
     <div class="card race">
       <div class="race-top">${dice(s.lastRoll)}<span class="muted small">Roll ${s.rollCount}</span></div>

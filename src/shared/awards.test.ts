@@ -5,14 +5,14 @@ import type { PublicPlayer, PublicState } from './protocol';
 function player(id: string, balance: number, history: (number | null)[], bets: number[] | null): PublicPlayer {
   return {
     id, name: id, balance, history, bets, staked: bets ? bets.reduce((a, b) => a + b, 0) : null,
-    connected: true, locked: true, playing: true, avatar: null,
+    connected: true, locked: true, playing: true, avatar: null, budget: 100,
   };
 }
 
 function state(players: PublicPlayer[], winner: number): PublicState {
   return {
-    code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, hideOdds: false, round: players[0].history.length,
-    players, totals: null, mode: 'manual', positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0,
+    code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, round: players[0].history.length,
+    players, totals: null, mode: 'manual', positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
     manualFinished: true, winner, log: [], hostConnected: true,
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyRoll, cents, emptyBets, floorCents, isTiedAtLine, net, odds, payout, pool, raceWinner, rollDice, sum,
+  applyRoll, cents, emptyBets, floorCents, isTiedAtLine, net, odds, payout, photoContenders, photoWinner, pool, raceWinner, rollDice, rollDie, sum,
   validateBets, type Bets,
 } from './game';
 
@@ -93,6 +93,20 @@ describe('digital race', () => {
     expect(raceWinner([10, 10, 3, 0, 0, 0])).toBeNull();
     expect(isTiedAtLine([10, 10, 3, 0, 0, 0])).toBe(true);
     expect(raceWinner(applyRoll([10, 10, 3, 0, 0, 0], [2, 4, 5]))).toBe(1);
+  });
+
+  it('a photo finish is only the horses level in front at the line', () => {
+    expect(photoContenders([10, 10, 9, 10, 0, 0])).toEqual([1, 2, 4]);
+    expect(photoContenders([11, 11, 10, 0, 0, 0])).toEqual([1, 2]);
+    expect(photoContenders([10, 9, 0, 0, 0, 0])).toBeNull();
+    expect(photoContenders([9, 9, 0, 0, 0, 0])).toBeNull();
+  });
+
+  it('a photo-finish die counts only if it shows a contender', () => {
+    expect(photoWinner([2, 5], 5)).toBe(5);
+    expect(photoWinner([2, 5], 3)).toBeNull();
+    expect(rollDie(() => 0)).toBe(1);
+    expect(rollDie(() => 0.9999)).toBe(6);
   });
 });
 

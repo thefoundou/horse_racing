@@ -89,6 +89,23 @@ export function isTiedAtLine(positions: number[]): boolean {
   return Math.max(...positions) >= FINISH && raceWinner(positions) === null;
 }
 
+/**
+ * The horses (1..6) in a photo finish: those level in front when the leaders
+ * first reach the line together. Null if there's no tie at the line.
+ */
+export function photoContenders(positions: number[]): number[] | null {
+  if (!isTiedAtLine(positions)) return null;
+  const lead = Math.max(...positions);
+  return positions.flatMap((p, i) => (p === lead ? [i + 1] : []));
+}
+
+/** One die (1..6) for the photo finish. */
+export const rollDie = (random: () => number = Math.random): number => 1 + Math.floor(random() * 6);
+
+/** A photo-finish die decides it only if it shows one of the contenders; otherwise roll again. */
+export const photoWinner = (contenders: number[], die: number): number | null =>
+  contenders.includes(die) ? die : null;
+
 /** Validate a player's bets: six non-negative amounts within their balance. */
 export function validateBets(bets: unknown, balance: number): Bets | string {
   if (!Array.isArray(bets) || bets.length !== HORSES) return 'Bets must cover horses 1-6.';

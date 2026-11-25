@@ -1,6 +1,6 @@
 // The digital race: a turf track with a galloping horse per lane.
 
-import { FINISH, HORSES, isTiedAtLine } from '../shared/game';
+import { FINISH, HORSES } from '../shared/game';
 import type { PublicState } from '../shared/protocol';
 import { avatar, esc } from './ui';
 
@@ -111,8 +111,49 @@ export function dice(roll: number[] | null, big = false): string {
 
 export function raceStatus(s: PublicState): string {
   if (s.winner) return `<div class="banner h${s.winner}-bg">Horse ${s.winner} wins!</div>`;
-  if (isTiedAtLine(s.positions)) return '<div class="banner warn">Photo finish! Tied at the line, keep rolling…</div>';
+  if (s.photo) return '<div class="banner warn">📸 Photo finish!</div>';
   return '';
+}
+
+const listOr = (xs: number[]) => xs.length <= 2 ? xs.join(' or ') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
+const listAnd = (xs: number[]) => xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+
+/**
+ * The photo finish, up close: the horses that hit the line together, neck and
+ * neck, with camera flashes. One die at a time decides it; once it shows one
+ * of them, that horse surges ahead and the others blow up.
+ */
+export function photoFinish(s: PublicState, opts: { big?: boolean; mine?: number[] | null } = {}): string {
+  const pf = s.photo!;
+  const w = s.winner && pf.horses.includes(s.winner) ? s.winner : null;
+  const last = pf.rolls[pf.rolls.length - 1] ?? null;
+  const caption = w ? `Rolled a ${w}! <b>Horse ${w} wins by a nose!</b>`
+    : last ? `Rolled a ${last}: not in the photo. <b>Roll again!</b>`
+    : `Horses ${listAnd(pf.horses)} hit the line together! <b>One die decides it: a ${listOr(pf.horses)} wins.</b>`;
+  const debris = Array.from({ length: 12 }, (_, k) => `<i style="--a:${k * 30 + (k % 3) * 9}deg; --d:${0.7 + (k % 4) * 0.22}"></i>`).join('');
+  const lanes = pf.horses.map((h, i) => {
+    const state = w === null ? '' : h === w ? 'pf-win' : 'pf-lose';
+    return `
+      <div class="pf-lane ${state} ${(opts.mine?.[h - 1] ?? 0) > 0 ? 'mine' : ''}" style="--i:${i}">
+        <span class="gate h${h}">${h}</span>
+        <div class="pf-runner">${horseSvg(h)}</div>
+        ${state === 'pf-lose' ? `<div class="pf-boom" aria-hidden="true"><span>💥</span>${debris}</div>` : ''}
+      </div>`;
+  }).join('');
+  const tries = pf.rolls.map((d, k) =>
+    `<span class="die h${d} ${pf.horses.includes(d) ? '' : 'miss'}" ${k === pf.rolls.length - 1 ? '' : 'style="animation:none"'}>${d}</span>`).join('');
+  return `
+    <div class="photo-finish ${opts.big ? 'large' : ''} ${w ? 'decided' : ''}" role="group" aria-label="Photo finish">
+      <div class="pf-flash" aria-hidden="true"></div>
+      <div class="pf-bulbs" aria-hidden="true">${'<i></i>'.repeat(6)}</div>
+      <div class="pf-title">📸 Photo finish!</div>
+      <div class="pf-stage running">
+        <div class="pf-line" aria-hidden="true"></div>
+        ${lanes}
+      </div>
+      <p class="pf-caption" aria-live="polite">${caption}</p>
+      ${tries ? `<div class="dice pf-tries ${opts.big ? 'large' : ''}">${tries}</div>` : ''}
+    </div>`;
 }
 
 export const HORSE_NUMBERS = Array.from({ length: HORSES }, (_, i) => i + 1);

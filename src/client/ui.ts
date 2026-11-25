@@ -94,9 +94,10 @@ export function betsTable(s: PublicState, winner: number | null = null) {
   const players = s.players.filter((p) => p.playing);
   if (!players.length) return '<p class="muted">No bets this round.</p>';
   const head = Array.from({ length: 6 }, (_, h) => `<th class="${winner === h + 1 ? 'win' : ''}">${horse(h + 1)}</th>`).join('');
-  const body = players.map((p) => `<tr><td class="name">${esc(p.name)}</td>${(p.bets ?? []).map((b, h) =>
+  // Budget: what each player had to bet with when this round's betting opened.
+  const body = players.map((p) => `<tr><td class="name">${esc(p.name)}</td><td class="budget">${money(p.budget)}</td>${(p.bets ?? []).map((b, h) =>
     `<td class="${winner === h + 1 ? 'win' : ''}">${b ? money(b) : ''}</td>`).join('')}</tr>`).join('');
-  return `<div class="scroll"><table class="table grid"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="scroll"><table class="table grid"><thead><tr><th></th><th class="budget">Budget</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /** Start, then each race's result and running sum, like the Results sheet. */
