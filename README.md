@@ -5,8 +5,8 @@ A multiplayer horse-betting party game for phones and laptops, based on the "Hor
 ## How to play
 
 1. On the screen everyone will watch (usually a laptop, often AirPlayed to a TV), tap **Start a lobby on this screen**. That device becomes the **big screen**: it runs the game but doesn't play or bet. It shows a big **QR code** and a 4-letter room code (the link `/<CODE>` works too). Tapping the room code at the top shows the QR code again at any point in the game.
-2. Players scan the code (or enter it) on their phones and pick a display name. The next page is just for a **profile photo** (camera or photo library; it's cropped square and shrunk to a small JPEG on the phone). Last game's photo is offered again, and players can skip it. Photos show on the leaderboard and player lists; anyone without one gets their initial. Players can change their name from the lobby until the host starts the game. Each player starts with **$100** of play money.
-3. On the big screen, the host picks the number of rounds, then starts the game. Each round:
+2. Players scan the code (or enter it) on their phones and pick a display name. The next page is just for a **profile photo** (camera or photo library; it's cropped square and shrunk to a small JPEG on the phone). Last game's photo is offered again, and players can skip it. Photos show on the leaderboard and player lists; anyone without one gets their initial. Players can change their name from the lobby until the host starts the game. Each player starts with the same budget of play money: **$100** unless the host picks another amount.
+3. On the big screen, the host picks the number of rounds and the **starting budget** (quick picks from $20 to $1,000, or any whole-dollar amount up to $1,000,000), then starts the game. Changing the budget updates everyone already in the lobby. Each round:
    - **Betting:** players bet on their phones, any amounts on horses 1–6, up to their balance. The big screen shows the six horses and who has locked in. Everyone bets blind: the odds and pool totals aren't even sent to browsers until everyone has locked in. Other players' bets stay hidden until betting closes. Tap **Lock in** when you're done. You can unlock and change your bets until everyone has locked in. The host can also **Close betting** early (for example, if someone has wandered off).
    - **Bets are in:** the big screen shows the final odds and everyone's bets; each phone shows what that player would get back for each possible winner.
    - **Race:** the host picks the mode.
@@ -20,7 +20,7 @@ A multiplayer horse-betting party game for phones and laptops, based on the "Hor
    - Moments: 💥 Biggest win, 😭 Most painful loss, 🎯 Longest shot (and who backed it), 🚀 Comeback of the day, 📉 Biggest collapse, 🔥 Hottest streak, 🥶 Coldest streak, 🎩 High roller, 👛 Tightest wallet, 🐎 Horse of the day, ⏱️ Longest race, 💰 Biggest pot, 🙈 Nobody saw it coming (rounds where nobody backed the winner).
    - The lobby keeps a short log of each round (winner, race mode, rolls, pool, winning odds, each player's stake) for this.
 
-Players who join mid-game get $100 and sit out any round whose betting has already closed.
+Players who join mid-game get the starting budget and sit out any round whose betting has already closed.
 
 ## The maths (from the spreadsheet)
 

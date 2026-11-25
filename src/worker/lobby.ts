@@ -9,7 +9,7 @@ import {
   tidy, validateBets, type Bets,
 } from '../shared/game';
 import {
-  MAX_AVATAR_CHARS, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS,
+  MAX_AVATAR_CHARS, MAX_BUDGET, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS, MIN_BUDGET,
   type ClientMsg, type Phase, type PhotoFinish, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
 } from '../shared/protocol';
 
@@ -31,6 +31,8 @@ interface State {
   hostId: string;
   phase: Phase;
   rounds: number;
+  /** What every player starts with (START_BALANCE if never set). */
+  startBalance?: number;
   round: number;
   players: Player[];
   mode: RaceMode | null;
@@ -161,7 +163,7 @@ export class Lobby extends DurableObject<Env> {
     const playing = s.phase === 'lobby' || s.phase === 'betting';
     const roundsDone = s.players[0]?.history.length ?? 0;
     s.players.push({
-      id, name, balance: START_BALANCE, bets: emptyBets(), locked: !playing, playing,
+      id, name, balance: s.startBalance ?? START_BALANCE, bets: emptyBets(), locked: !playing, playing,
       history: Array(roundsDone).fill(null),
     });
     return id;
@@ -188,6 +190,13 @@ export class Lobby extends DurableObject<Env> {
           const n = Math.floor(Number(msg.rounds));
           if (!(n >= 1 && n <= MAX_ROUNDS)) fail(`Rounds must be 1-${MAX_ROUNDS}.`);
           s.rounds = n;
+        }
+        if (msg.startBalance !== undefined) {
+          const b = Math.floor(Number(msg.startBalance));
+          if (!(b >= MIN_BUDGET && b <= MAX_BUDGET)) fail(`The starting budget must be $${MIN_BUDGET}-$${MAX_BUDGET.toLocaleString('en-US')}.`);
+          s.startBalance = b;
+          // Nobody has bet yet: everyone in the lobby starts with the new amount.
+          for (const p of s.players) p.balance = b;
         }
         return;
       }
@@ -285,7 +294,7 @@ export class Lobby extends DurableObject<Env> {
 
       case 'playAgain':
         host(); phase('finished');
-        for (const p of s.players) Object.assign(p, { balance: START_BALANCE, history: [], bets: emptyBets() });
+        for (const p of s.players) Object.assign(p, { balance: s.startBalance ?? START_BALANCE, history: [], bets: emptyBets() });
         s.phase = 'lobby';
         s.round = 0;
         s.log = [];
@@ -372,7 +381,7 @@ export class Lobby extends DurableObject<Env> {
   private view(s: State, you: string | null, online: Set<string>): PublicState {
     const open = s.phase === 'lobby' || s.phase === 'betting';
     return {
-      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, round: s.round,
+      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, startBalance: s.startBalance ?? START_BALANCE, round: s.round,
       players: s.players.map((p) => {
         const visible = p.id === you || !open;
         return {

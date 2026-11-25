@@ -1,7 +1,6 @@
 // End-of-game recap: the podium and the biggest moments of the whole game,
 // worked out from each player's round results and the lobby's round log.
 
-import { START_BALANCE } from './game';
 import { streak } from './awards';
 import type { PublicPlayer, PublicState, RoundLog } from './protocol';
 
@@ -32,9 +31,9 @@ const fmt = (n: number) => {
 const signed = (n: number) => (n > EPS ? '+' : '') + fmt(n);
 const list = (xs: (string | number)[]) => xs.length <= 1 ? String(xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
 
-/** Balances after each round, starting from the opening $100. */
-export function runningBalances(p: PublicPlayer): number[] {
-  const out = [START_BALANCE];
+/** Balances after each round, starting from the game's opening budget. */
+export function runningBalances(p: PublicPlayer, start: number): number[] {
+  const out = [start];
   for (const n of p.history) out.push(out[out.length - 1] + (n ?? 0));
   return out;
 }
@@ -85,11 +84,12 @@ export function gameRecap(s: PublicState): GameRecap {
   // Comebacks and collapses, from each player's running balance.
   let comeback: { p: PublicPlayer; low: number; gain: number } | null = null;
   let collapse: { p: PublicPlayer; high: number; drop: number } | null = null;
+  const swing = s.startBalance * 0.2; // a fifth of the starting budget
   for (const p of s.players) {
-    const bal = runningBalances(p);
+    const bal = runningBalances(p, s.startBalance);
     const low = Math.min(...bal), high = Math.max(...bal);
-    if (low < START_BALANCE - EPS && p.balance - low >= 20 && (!comeback || p.balance - low > comeback.gain)) comeback = { p, low, gain: p.balance - low };
-    if (high > START_BALANCE + EPS && high - p.balance >= 20 && (!collapse || high - p.balance > collapse.drop)) collapse = { p, high, drop: high - p.balance };
+    if (low < s.startBalance - EPS && p.balance - low >= swing && (!comeback || p.balance - low > comeback.gain)) comeback = { p, low, gain: p.balance - low };
+    if (high > s.startBalance + EPS && high - p.balance >= swing && (!collapse || high - p.balance > collapse.drop)) collapse = { p, high, drop: high - p.balance };
   }
   if (comeback) {
     const { p, low } = comeback as { p: PublicPlayer; low: number };
