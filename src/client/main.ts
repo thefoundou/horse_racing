@@ -13,7 +13,7 @@ import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
-import { playBugle, playCheer, playGallop, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
+import { playBoom, playBugle, playCheer, playGallop, playShutters, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
 import { app, esc, money, r2, render, store, toast } from './ui';
 import { floorCents } from '../shared/game';
 
@@ -118,6 +118,8 @@ interface Room {
   manualPick: number | null;
   /** Keep the finished race on screen briefly before the results. */
   holdRaceUntil: number;
+  /** A photo finish just began: keep the track up until the horses have slid to the line. */
+  closeUpAt: number;
   /** Positions before the latest roll, so the next render can slide from them. */
   slideFrom: number[] | null;
   /** The round whose results celebration has already played. */
@@ -144,7 +146,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -286,10 +288,16 @@ function onState(r: Room, s: PublicState, you: string) {
     r.draftText = r.draft.map((b) => (b ? String(r2(b)) : ''));
     r.draftRound = s.round;
   }
+  if (prev && prev.round === s.round && !prev.photo && s.photo) {
+    // A tie at the line: let the horses slide up to it, then go in close for the photo.
+    r.closeUpAt = Date.now() + 1700;
+    setTimeout(() => room === r && renderRoom(r), 1750);
+  }
   if (prev?.phase === 'racing' && s.phase === 'results' && s.mode === 'digital') {
-    // Let the winner cross the line before switching to the results.
-    r.holdRaceUntil = Date.now() + 3600;
-    setTimeout(() => room === r && renderRoom(r), 3700);
+    // Let the winner cross the line (or the photo-finish losers blow up) before the results.
+    const hold = s.photo ? 4600 : 3600;
+    r.holdRaceUntil = Date.now() + hold;
+    setTimeout(() => room === r && renderRoom(r), hold + 100);
   }
   if (s.phase !== 'racing' || s.mode !== 'digital') stopAuto(r);
   if (s.phase !== 'racing') r.manualPick = null;
@@ -311,10 +319,22 @@ function raceSounds(prev: PublicState | null, s: PublicState) {
     const moved = s.positions.filter((p, i) => p !== prev.positions[i]).length;
     if (moved) playGallop(moved);
   }
+  if (s.photo && prev.round === s.round) {
+    const before = prev.photo?.rolls.length ?? -1;
+    // Flashes as the horses reach the line together, then with every die.
+    if (!prev.photo) window.setTimeout(() => playShutters(5), 1700);
+    else if (s.photo.rolls.length > before) playShutters(2);
+  }
   if (s.winner && !prev.winner) {
     stopRaceAmbience();
-    // Digital: cheer as the winner reaches the line (after its slide). Manual: straight away.
-    window.setTimeout(playCheer, s.mode === 'digital' ? 1100 : 0);
+    if (s.photo) {
+      // Photo finish: the losers blow up, then the crowd goes wild.
+      window.setTimeout(() => playBoom(s.photo!.horses.length - 1), 650);
+      window.setTimeout(playCheer, 1300);
+    } else {
+      // Digital: cheer as the winner reaches the line (after its slide). Manual: straight away.
+      window.setTimeout(playCheer, s.mode === 'digital' ? 1100 : 0);
+    }
   }
   if (!racing) stopRaceAmbience();
 }
@@ -384,7 +404,7 @@ function renderRoom(r: Room) {
   if (!isHost && me && s.phase === 'betting' && !offline && !r.showQr && !document.getElementById('reconnecting')) {
     const form = document.getElementById('betForm');
     if (form && form.dataset.key === bettingKey(s, me)) {
-      patchBetting(s, me, { draft: r.draft, draftText: r.draftText, showRace: false, slideFrom: null, celebrate: false });
+      patchBetting(s, me, { draft: r.draft, draftText: r.draftText, showRace: false, slideFrom: null, closeUp: false, celebrate: false });
       return;
     }
   }
@@ -396,8 +416,9 @@ function renderRoom(r: Room) {
     || (s.phase === 'finished' && r.celebratedRound !== FINAL_SHOWN);
 
   let body: string;
-  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, celebrate });
-  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, celebrate });
+  const closeUp = !!s.photo && Date.now() >= r.closeUpAt;
+  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, closeUp, celebrate });
+  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, closeUp, celebrate });
   else return; // not joined yet
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
@@ -468,8 +489,6 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));
-  const hide = document.getElementById('hideOdds') as HTMLInputElement | null;
-  if (hide) hide.onchange = () => send({ t: 'config', hideOdds: hide.checked });
   // Lock in exactly what's on screen: the bets travel with the lock, and if
   // they aren't valid the lobby says so and you stay unlocked.
   on('lock', () => { clearTimeout(r.sendTimer); if (r.draft) send({ t: 'lock', bets: r.draft }); });

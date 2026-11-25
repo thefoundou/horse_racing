@@ -249,6 +249,50 @@ export function stopRaceAmbience(): void {
   ambience = 0;
 }
 
+// ---- Photo finish: camera shutters and explosions ------------------------------
+
+/** A few camera shutters going off, each with a flash-gun whine. */
+export function playShutters(count = 3): void {
+  if (!ready()) return;
+  const now = ac!.currentTime + 0.02;
+  for (let i = 0; i < count; i++) {
+    const t = now + i * 0.16 + Math.random() * 0.08;
+    noiseBurst(t, 0.025, { type: 'highpass', freq: 3000, gain: 0.25 }); // the shutter opening
+    noiseBurst(t + 0.05, 0.03, { type: 'bandpass', freq: 1800, q: 2, gain: 0.2 }); // and closing
+    const o = ac!.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(2200, t + 0.06);
+    o.frequency.exponentialRampToValueAtTime(5200, t + 0.4);
+    const g = ac!.createGain();
+    g.gain.setValueAtTime(0.0001, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.015, t + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    o.connect(g).connect(out!);
+    o.start(t + 0.06); o.stop(t + 0.45);
+  }
+}
+
+/** A cartoon explosion: a deep boom and a rush of noise, once per losing horse. */
+export function playBoom(count = 1): void {
+  if (!ready()) return;
+  const now = ac!.currentTime + 0.02;
+  for (let i = 0; i < Math.min(count, 4); i++) {
+    const t = now + i * 0.12;
+    const o = ac!.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(32, t + 0.6);
+    const g = ac!.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.7, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    o.connect(g).connect(out!);
+    o.start(t); o.stop(t + 0.85);
+    noiseBurst(t, 0.9, { type: 'lowpass', freq: 2400, freqEnd: 180, gain: 0.45 });
+    noiseBurst(t + 0.02, 0.25, { type: 'highpass', freq: 2500, gain: 0.12 }); // crackle
+  }
+}
+
 // ---- The finish: the crowd goes wild --------------------------------------------
 
 export function playCheer(): void {

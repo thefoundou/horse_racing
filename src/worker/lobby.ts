@@ -5,12 +5,12 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-  applyRoll, cents, emptyBets, HORSES, horseTotals, net, raceWinner, rollDice, START_BALANCE, sum,
+  applyRoll, cents, emptyBets, HORSES, horseTotals, net, photoContenders, photoWinner, raceWinner, rollDice, rollDie, START_BALANCE, sum,
   tidy, validateBets, type Bets,
 } from '../shared/game';
 import {
   MAX_AVATAR_CHARS, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS,
-  type ClientMsg, type Phase, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
+  type ClientMsg, type Phase, type PhotoFinish, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
 } from '../shared/protocol';
 
 interface Player {
@@ -22,6 +22,8 @@ interface Player {
   playing: boolean;
   history: (number | null)[];
   avatar?: number;
+  /** Balance when this round's betting opened. */
+  budget?: number;
 }
 
 interface State {
@@ -29,13 +31,13 @@ interface State {
   hostId: string;
   phase: Phase;
   rounds: number;
-  hideOdds?: boolean;
   round: number;
   players: Player[];
   mode: RaceMode | null;
   positions: number[];
   lastRoll: number[] | null;
   rollCount: number;
+  photo?: PhotoFinish | null;
   manualFinished: boolean;
   winner: number | null; // 1..6
   log?: RoundLog[];
@@ -181,7 +183,6 @@ export class Lobby extends DurableObject<Env> {
           if (!(n >= 1 && n <= MAX_ROUNDS)) fail(`Rounds must be 1-${MAX_ROUNDS}.`);
           s.rounds = n;
         }
-        if (msg.hideOdds !== undefined) s.hideOdds = msg.hideOdds === true;
         return;
       }
       case 'start':
@@ -232,12 +233,23 @@ export class Lobby extends DurableObject<Env> {
       case 'roll': {
         host(); phase('racing');
         if (s.mode !== 'digital') fail('This is a manual race.');
+        s.rollCount += 1;
+        if (s.photo) {
+          // Photo finish: one die; it counts only if it shows a horse in the photo.
+          const die = rollDie();
+          s.photo.rolls.push(die);
+          s.lastRoll = [die];
+          const w = photoWinner(s.photo.horses, die);
+          if (w !== null) this.settle(s, w - 1);
+          return;
+        }
         const dice = rollDice();
         s.positions = applyRoll(s.positions, dice);
         s.lastRoll = dice;
-        s.rollCount += 1;
         const w = raceWinner(s.positions);
-        if (w !== null) this.settle(s, w);
+        if (w !== null) return this.settle(s, w);
+        const tied = photoContenders(s.positions);
+        if (tied) s.photo = { horses: tied, rolls: [] };
         return;
       }
       case 'finish':
@@ -295,11 +307,13 @@ export class Lobby extends DurableObject<Env> {
     s.positions = Array(HORSES).fill(0);
     s.lastRoll = null;
     s.rollCount = 0;
+    s.photo = null;
     s.manualFinished = false;
     s.winner = null;
     for (const p of s.players) {
       p.bets = emptyBets();
       p.playing = true;
+      p.budget = p.balance;
       p.locked = p.balance < BROKE; // nothing left to bet
     }
     this.checkAllLocked(s);
@@ -346,19 +360,18 @@ export class Lobby extends DurableObject<Env> {
   private view(s: State, you: string | null, online: Set<string>): PublicState {
     const open = s.phase === 'lobby' || s.phase === 'betting';
     return {
-      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, hideOdds: !!s.hideOdds, round: s.round,
+      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, round: s.round,
       players: s.players.map((p) => {
         const visible = p.id === you || !open;
         return {
           id: p.id, name: p.name, balance: p.balance, connected: online.has(p.id), avatar: p.avatar ?? null,
-          locked: p.locked, playing: p.playing, history: p.history,
+          locked: p.locked, playing: p.playing, history: p.history, budget: p.budget ?? p.balance,
           bets: visible ? p.bets : null, staked: visible ? sum(p.bets) : null,
         };
       }),
-      // Hidden odds are withheld from the wire, not just the screen.
-      totals: s.phase === 'betting' && s.hideOdds ? null
-        : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
-      mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount,
+      // Odds stay secret while betting: withheld from the wire, not just the screen.
+      totals: s.phase === 'betting' ? null : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
+      mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount, photo: s.photo ?? null,
       manualFinished: s.manualFinished, winner: s.winner, log: s.log ?? [], hostConnected: online.has(s.hostId),
     };
   }

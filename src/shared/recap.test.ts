@@ -5,7 +5,7 @@ import type { PublicPlayer, PublicState, RoundLog } from './protocol';
 const player = (id: string, history: (number | null)[]): PublicPlayer => ({
   id, name: id[0].toUpperCase() + id.slice(1), history,
   balance: 100 + history.reduce<number>((a, n) => a + (n ?? 0), 0),
-  bets: null, staked: null, connected: true, locked: true, playing: true, avatar: null,
+  bets: null, staked: null, connected: true, locked: true, playing: true, avatar: null, budget: 100,
 });
 
 const log = (round: number, winner: number, pool: number, winOdds: number, stakes: Record<string, [number, number]>, rolls = 0): RoundLog =>
@@ -13,8 +13,8 @@ const log = (round: number, winner: number, pool: number, winOdds: number, stake
 
 function game(players: PublicPlayer[], entries: RoundLog[]): PublicState {
   return {
-    code: 'ABCD', hostId: 'host', phase: 'finished', rounds: entries.length, hideOdds: false, round: entries.length,
-    players, totals: null, mode: null, positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0,
+    code: 'ABCD', hostId: 'host', phase: 'finished', rounds: entries.length, round: entries.length,
+    players, totals: null, mode: null, positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
     manualFinished: false, winner: null, log: entries, hostConnected: true,
   };
 }

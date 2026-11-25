@@ -28,6 +28,16 @@ export interface PublicPlayer {
   history: (number | null)[];
   /** Profile photo version (bumped on each upload), or null for none. */
   avatar: number | null;
+  /** What they had to bet with when this round's betting opened. */
+  budget: number;
+}
+
+/** A photo finish: horses level at the line, settled one die at a time. */
+export interface PhotoFinish {
+  /** The horses in it, 1..6. */
+  horses: number[];
+  /** Each single die rolled so far; the last decides it once it shows a contender. */
+  rolls: number[];
 }
 
 /** What happened in one finished round, kept for the end-of-game recap. */
@@ -50,17 +60,17 @@ export interface PublicState {
   hostId: string;
   phase: Phase;
   rounds: number;
-  /** Keep odds and pool totals secret until betting closes. */
-  hideOdds: boolean;
   /** 1-based; 0 before the game starts. */
   round: number;
   players: PublicPlayer[];
-  /** Total on each horse this round: live while betting, or null if the host hid the odds. */
+  /** Total on each horse this round; null while betting (odds stay secret until everyone locks in). */
   totals: number[] | null;
   mode: RaceMode | null;
   positions: number[];
   lastRoll: number[] | null;
   rollCount: number;
+  /** Set once leaders reach the line level; then each roll is a single die. */
+  photo: PhotoFinish | null;
   /** Manual race: the host pressed Finish and is picking the winner. */
   manualFinished: boolean;
   /** Winning horse, 1..6. */
@@ -73,7 +83,7 @@ export interface PublicState {
 
 export type ClientMsg =
   | { t: 'hello'; playerId: string; name: string }
-  | { t: 'config'; rounds?: number; hideOdds?: boolean }
+  | { t: 'config'; rounds?: number }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }
   /** Lock in; `bets` (what's on screen) are checked and saved in the same step. */

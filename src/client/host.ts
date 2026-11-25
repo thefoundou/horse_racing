@@ -5,7 +5,7 @@
 import { FINISH, horseTotals, sum } from '../shared/game';
 import { MAX_ROUNDS, type PublicState } from '../shared/protocol';
 import { joinUrl, qrSvg } from './qr';
-import { dice, horseSvg, HORSE_NUMBERS, raceStatus, track } from './race';
+import { dice, horseSvg, HORSE_NUMBERS, photoFinish, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
 import { gameRecap } from '../shared/recap';
 import { finalLeaderboard, gameStats, moments, podium } from './recap-view';
@@ -17,6 +17,8 @@ export interface HostCtx {
   manualPick: number | null;
   showRace: boolean;
   slideFrom: number[] | null;
+  /** Show the photo finish up close (after the horses have slid to the line). */
+  closeUp: boolean;
   /** First showing of this round's results: play the celebration. */
   celebrate: boolean;
 }
@@ -59,10 +61,7 @@ function lobby(s: PublicState) {
               <button class="secondary" id="roundsUp" ${s.rounds >= MAX_ROUNDS ? 'disabled' : ''} aria-label="More rounds">+</button>
             </div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="hideOdds" ${s.hideOdds ? 'checked' : ''} />
-            <span><b>Hide odds until all bets are in</b><br /><span class="muted small">Players bet blind: no live odds or pool totals while betting.</span></span>
-          </label>
+          <p class="muted small">Odds stay hidden until everyone has locked in their bets.</p>
           <button class="primary big" id="start" ${n ? '' : 'disabled'}>${n ? `Start game with ${n} ${n === 1 ? 'player' : 'players'}` : 'Waiting for players…'}</button>
         </div>
       </div>
@@ -115,12 +114,21 @@ function review(s: PublicState) {
           <button class="primary big" data-race="digital">🎲 Digital race</button>
           <button class="secondary big" data-race="manual">🏁 Manual race</button>
         </div>
-        <p class="muted small">Digital: roll 3 dice at a time; each die moves that horse one space; first to ${FINISH} wins. Manual: race for real, then press Finish and pick the winner.</p>
+        <p class="muted small">Digital: roll 3 dice at a time; each die moves that horse one space; first to ${FINISH} wins. A tie at the line is a photo finish, settled one die at a time. Manual: race for real, then press Finish and pick the winner.</p>
       </div>
     </div>`;
 }
 
 function race(s: PublicState, c: HostCtx) {
+  if (s.photo && c.closeUp) {
+    return `
+      ${photoFinish(s, { big: true })}
+      ${!s.winner ? `
+        <div class="race-controls pf-controls">
+          <button class="primary" id="roll" ${c.autoRoll ? 'disabled' : ''}>🎲 Roll the die</button>
+          <button class="secondary" id="auto">${c.autoRoll ? '⏸ Stop' : '⏩ Auto-roll'}</button>
+        </div>` : ''}`;
+  }
   return `
     <div class="race-head">
       ${dice(s.lastRoll, true)}
