@@ -13,7 +13,7 @@ import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
-import { playBoom, playBugle, playCheer, playGallop, playShutters, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
+import { playBoom, playBugle, playCheer, playGallop, playRegister, playShutters, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
 import { app, esc, money, r2, render, store, toast } from './ui';
 import { floorCents } from '../shared/game';
 
@@ -303,8 +303,21 @@ function onState(r: Room, s: PublicState, you: string) {
   if (s.phase !== 'racing') r.manualPick = null;
   if (prev && prev.round === s.round && prev.positions.join() !== s.positions.join()) r.slideFrom = prev.positions;
   if (s.hostId === you) raceSounds(prev, s);
+  betSounds(prev, s, you);
   r.lastPhase = s.phase;
   renderRoom(r);
+}
+
+/**
+ * Cha-ching when bets go in: on the big screen for each player who locks in
+ * (once if the host closes betting on several at once), and on your own phone
+ * when you lock in.
+ */
+function betSounds(prev: PublicState | null, s: PublicState, you: string) {
+  if (!prev || prev.phase !== 'betting' || prev.round !== s.round) return;
+  const wasLocked = new Set(prev.players.filter((p) => p.locked).map((p) => p.id));
+  const fresh = s.players.filter((p) => p.playing && p.locked && !wasLocked.has(p.id) && prev.players.some((q) => q.id === p.id));
+  if (s.hostId === you ? fresh.length > 0 : fresh.some((p) => p.id === you)) playRegister();
 }
 
 /** The big screen's soundtrack: bugle at the off, hooves and horses during the race, a cheer at the finish. */

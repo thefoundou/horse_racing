@@ -1,7 +1,7 @@
 // Race-day sound for the big screen, all synthesised live with the Web Audio
 // API (no recordings to load or license): a bugle fanfare for the start,
 // galloping hooves and huffs as horses move, whinnies and snorts now and
-// then, and a crowd cheering the winner.
+// then, a crowd cheering the winner, and a cash register as bets go in.
 //
 // Browsers only allow sound after the page has been clicked or tapped, so
 // the context is created on the first click (the host clicks plenty).
@@ -293,6 +293,55 @@ export function playBoom(count = 1): void {
   }
 }
 
+// ---- Betting: a mechanical cash register ---------------------------------------
+
+/** A bell partial: a sine that rings and dies away. */
+function ring(t: number, freq: number, gain: number, decay: number) {
+  const o = ac!.createOscillator();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  const g = ac!.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+  o.connect(g).connect(out!);
+  o.start(t);
+  o.stop(t + decay + 0.05);
+}
+
+/** A hard little click of metal on metal. */
+function clack(t: number, gain: number, freq = 2600) {
+  noiseBurst(t, 0.018, { type: 'bandpass', freq, q: 3, gain });
+  noiseBurst(t, 0.006, { type: 'highpass', freq: 5000, gain: gain * 0.6 });
+}
+
+/**
+ * "Cha-ching": the key goes down and the lever ratchets round ("cha"), then
+ * the bell rings and the cash drawer slides out with a thunk ("ching").
+ */
+function register(t: number) {
+  // Cha: the key, then the mechanism ratcheting.
+  clack(t, 0.5, 1800);
+  thump(t, 0.12);
+  for (let i = 0; i < 6; i++) clack(t + 0.04 + i * 0.022 + Math.random() * 0.004, 0.22 + i * 0.02, 2800 + i * 150);
+  // Ching: a small bright bell (inharmonic partials, the high ones dying first).
+  const b = t + 0.2, f = 1760 * (0.97 + Math.random() * 0.06);
+  for (const [ratio, gain, decay] of [[1, 0.16, 1.6], [2.32, 0.08, 1.0], [4.25, 0.05, 0.55], [5.4, 0.035, 0.35], [0.5, 0.03, 0.9]] as const) {
+    ring(b, f * ratio, gain, decay);
+  }
+  clack(b, 0.35, 4200); // the hammer striking it
+  // The drawer: rolling out, then hitting its stop.
+  noiseBurst(b + 0.01, 0.2, { type: 'bandpass', freq: 900, q: 0.8, gain: 0.1, attack: 0.03, freqEnd: 500 });
+  thump(b + 0.2, 0.35);
+  clack(b + 0.2, 0.25, 1200);
+}
+
+/** Cha-ching! Someone's bet is in. */
+export function playRegister(): void {
+  if (!ready()) return;
+  register(ac!.currentTime + 0.02);
+}
+
 // ---- The finish: the crowd goes wild --------------------------------------------
 
 export function playCheer(): void {
@@ -339,9 +388,9 @@ export function playCheer(): void {
  * Render one of the voices into an offline context (for listening tests and
  * tuning; not used by the game).
  */
-export function renderOffline(a: BaseAudioContext, voice: 'nicker' | 'snort', at: number): void {
+export function renderOffline(a: BaseAudioContext, voice: 'nicker' | 'snort' | 'register', at: number): void {
   const prev = [ac, out, noise] as const;
   ac = a; out = a.destination; noise = makeNoise(a);
-  ({ nicker, snort })[voice](at);
+  ({ nicker, snort, register })[voice](at);
   [ac, out, noise] = prev;
 }
