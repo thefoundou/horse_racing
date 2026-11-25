@@ -2,7 +2,7 @@
 // leaderboard. The host's big screen runs the game.
 
 import { floorCents, HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
-import type { PublicPlayer, PublicState } from '../shared/protocol';
+import { MAX_NAME, type PublicPlayer, type PublicState } from '../shared/protocol';
 import { dice, photoFinish, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
 import { gameRecap } from '../shared/recap';
@@ -16,13 +16,15 @@ export interface PlayerCtx {
   showRace: boolean;
   slideFrom: number[] | null;
   closeUp: boolean;
+  /** Lobby: the name being edited, or null when not editing. */
+  nameDraft?: string | null;
   celebrate: boolean;
 }
 
 const bigScreen = '<span class="tag tv-tag">big screen</span>';
 
 export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): string {
-  if (s.phase === 'lobby') return lobby(s, me);
+  if (s.phase === 'lobby') return lobby(s, me, c);
   if (s.phase === 'betting') return betting(s, me, c);
   if (s.phase === 'review') return review(s, me);
   if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, me, c);
@@ -30,14 +32,25 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   return finished(s, me, c);
 }
 
-function lobby(s: PublicState, me: PublicPlayer) {
+function lobby(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
+  const editing = c.nameDraft != null;
   return `
     <div class="card center">
       <button class="avatar-btn" id="changePhoto" aria-label="${me.avatar ? 'Change your photo' : 'Add a photo'}">
         ${avatar(s.code, me, 'xl')}
         <span class="avatar-edit">${me.avatar ? 'Change photo' : 'Add a photo'}</span>
       </button>
+      ${editing ? `
+      <form class="name-edit" id="nameEditForm" autocomplete="off">
+        <label for="nameEdit" class="muted small">Your display name</label>
+        <input id="nameEdit" maxlength="${MAX_NAME}" value="${esc(c.nameDraft!)}" />
+        <div class="two">
+          <button type="button" class="secondary" id="cancelName">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>` : `
       <h2>You're in, ${esc(me.name)}!</h2>
+      <button class="link edit-name" id="editName">✏️ Edit name</button>`}
       <p class="muted">You have ${money(START_BALANCE)} to bet. Watch the ${bigScreen}: the game starts from there.</p>
       <p class="note">Odds stay hidden until everyone has locked in their bets.</p>
     </div>

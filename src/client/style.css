@@ -153,6 +153,9 @@ details[open].card summary { margin-bottom: 10px; }
 .avatar.xl { width: 104px; height: 104px; font-size: 2.6rem; border-width: 3px; }
 .avatar.empty { background: var(--paper-2); color: var(--muted); font-size: 2.2rem; border: 2px dashed var(--muted); box-shadow: none; }
 .avatar-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0 auto 14px; background: none; padding: 0; text-transform: none; letter-spacing: 0; }
+.edit-name { margin: -2px auto 10px; font-size: 0.9rem; }
+.name-edit { text-align: left; margin: 0 auto 12px; max-width: 22em; }
+.name-edit input { margin: 4px 0 10px; text-align: center; font-weight: 700; }
 .avatar-edit { color: var(--red); font-weight: 700; font-size: 0.9rem; text-decoration: underline; }
 
 .stepper { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 4px 0; }
@@ -274,14 +277,20 @@ details[open].card summary { margin-bottom: 10px; }
 @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16%); } }
 
 /* Big screen: the backers' photos trail their horse and bounce along with it. */
-.followers { position: absolute; right: 90%; bottom: 4%; display: flex; flex-direction: row-reverse; align-items: flex-end; pointer-events: none; }
-.follower {
-  --a: min(calc(var(--follow-w) / 2.6), calc(var(--lane-h) * 0.74));
-  display: block; margin-left: calc(var(--a) * -0.45); position: relative; z-index: calc(10 - var(--k));
+.followers {
+  /* Every backer trails the horse, however many: they squeeze up (and shrink a little) to fit the
+     space behind it, which is the strip at the gate plus the ground the horse has covered. */
+  --n: 1;
+  --room: calc(var(--follow-w) + var(--pos, 0) * var(--unit) - 4px);
+  --a0: min(calc(var(--follow-w) / 2.6), calc(var(--lane-h) * 0.74));
+  --a: max(calc(var(--a0) * 0.6), min(var(--a0), calc(var(--room) / (1 + 0.55 * (var(--n) - 1)))));
+  --step: max(2px, min(calc(var(--a) * 0.55), calc((var(--room) - var(--a)) / max(var(--n) - 1, 1))));
+  position: absolute; right: 90%; bottom: 4%; display: flex; flex-direction: row-reverse; align-items: flex-end; pointer-events: none;
 }
+/* Biggest stake nearest the horse and drawn on top. */
+.follower { display: block; margin-left: calc(var(--step) - var(--a)); position: relative; z-index: calc(100 - var(--k)); }
 .follower:last-child { margin-left: 0; }
 .follower .avatar { width: var(--a); height: var(--a); font-size: calc(var(--a) * 0.45); border-width: 2px; box-shadow: 0 2px 6px #1f2b2e66; }
-.follower .more { background: var(--ink); color: var(--paper); font-size: calc(var(--a) * 0.36); }
 .running .follower { animation: bob 0.45s ease-in-out infinite alternate; animation-delay: calc(var(--k) * -0.12s); }
 .runner.moving .follower { animation: hop-follow 0.35s ease-in-out 4; animation-delay: calc(var(--k) * 0.07s); }
 @keyframes hop-follow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-38%); } }

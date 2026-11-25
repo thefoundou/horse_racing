@@ -131,6 +131,8 @@ interface Room {
   askPhoto: boolean;
   /** The photo shown on that page (picked now, or remembered from last time). */
   photoPreview: string | null;
+  /** The name being edited in the lobby, or null. */
+  nameDraft: string | null;
   /** A photo waiting to go: kept until the lobby confirms it (phones drop the connection while the camera is open). */
   photoOutbox: { data: string; version: number; timer: number } | null;
 }
@@ -146,7 +148,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null, nameDraft: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -276,9 +278,13 @@ function onState(r: Room, s: PublicState, you: string) {
   const prev = r.state;
   r.state = s;
   r.you = you;
-  store.set(identityKey(r.code), r.identity);
-
   const me = s.players.find((p) => p.id === you);
+  if (me && !r.identity.host && r.identity.name !== me.name) {
+    r.identity.name = me.name; // renamed in the lobby
+    store.set('hr:lastName', me.name);
+  }
+  store.set(identityKey(r.code), r.identity);
+  if (s.phase !== 'lobby') r.nameDraft = null; // names are fixed once the game starts
   if (me && r.photoOutbox && (me.avatar ?? 0) > r.photoOutbox.version) {
     clearTimeout(r.photoOutbox.timer); // the lobby has the photo
     r.photoOutbox = null;
@@ -431,7 +437,7 @@ function renderRoom(r: Room) {
   let body: string;
   const closeUp = !!s.photo && Date.now() >= r.closeUpAt;
   if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, closeUp, celebrate });
-  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, closeUp, celebrate });
+  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, closeUp, celebrate, nameDraft: r.nameDraft });
   else return; // not joined yet
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
@@ -493,6 +499,24 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('shareBtn', () => share(s.code));
   on('home', () => go('/'));
   on('soundToggle', () => { unlockAudio(); setSound(!soundOn()); renderRoom(r); });
+  on('editName', () => {
+    r.nameDraft = me?.name ?? '';
+    renderRoom(r);
+    const input = document.getElementById('nameEdit') as HTMLInputElement | null;
+    input?.focus(); input?.select();
+  });
+  on('cancelName', () => { r.nameDraft = null; renderRoom(r); });
+  const nameInput = document.getElementById('nameEdit') as HTMLInputElement | null;
+  if (nameInput) nameInput.oninput = () => { r.nameDraft = nameInput.value; };
+  const nameForm = document.getElementById('nameEditForm') as HTMLFormElement | null;
+  if (nameForm) nameForm.onsubmit = (e) => {
+    e.preventDefault();
+    const name = nameInput!.value.trim().replace(/\s+/g, ' ');
+    if (!name) return toast('Pick a name.');
+    r.nameDraft = null;
+    if (name !== me?.name) send({ t: 'rename', name });
+    renderRoom(r);
+  };
   on('changePhoto', async () => {
     const photo = await pickPhoto();
     if (!photo) return;

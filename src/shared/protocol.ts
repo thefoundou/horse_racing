@@ -83,6 +83,8 @@ export interface PublicState {
 
 export type ClientMsg =
   | { t: 'hello'; playerId: string; name: string }
+  /** Change your display name (until the game starts). */
+  | { t: 'rename'; name: string }
   | { t: 'config'; rounds?: number }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }

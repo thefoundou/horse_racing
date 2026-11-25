@@ -47,17 +47,15 @@ export function horseSvg(h: number): string {
 /** Where a runner sits: `pos` squares past the start, so its nose is on the far edge of space `pos`. */
 const runnerLeft = (pos: number) => `calc(var(--follow-w) + ${Math.min(pos, FINISH)} * var(--unit))`;
 
-/** The photos of everyone who backed a horse, biggest stake nearest the horse. */
+/** The photos of everyone who backed a horse, biggest stake nearest the horse. All of them, however many. */
 function followers(s: PublicState, h: number): string {
   const backers = s.players
     .filter((p) => p.playing && (p.bets?.[h - 1] ?? 0) > 0)
     .sort((a, b) => (b.bets![h - 1] - a.bets![h - 1]) || a.name.localeCompare(b.name));
   if (!backers.length) return '';
-  const shown = backers.slice(0, backers.length > 4 ? 3 : 4);
-  const extra = backers.length - shown.length;
-  return `<div class="followers" aria-label="Backed by ${esc(backers.map((p) => p.name).join(', '))}">${
-    shown.map((p, k) => `<span class="follower" style="--k:${k}">${avatar(s.code, p)}</span>`).join('')
-  }${extra ? `<span class="follower" style="--k:${shown.length}"><span class="avatar more">+${extra}</span></span>` : ''}</div>`;
+  return `<div class="followers" style="--n:${backers.length}" aria-label="Backed by ${esc(backers.map((p) => p.name).join(', '))}">${
+    backers.map((p, k) => `<span class="follower" style="--k:${k}">${avatar(s.code, p)}</span>`).join('')
+  }</div>`;
 }
 
 /**
@@ -83,7 +81,7 @@ export function track(
       <div class="lane h${h}-lane ${won ? 'won' : ''} ${pos === lead && pos > 0 && !s.winner ? 'leading' : ''} ${(opts.mine?.[i] ?? 0) > 0 ? 'mine' : ''}">
         <span class="gate h${h}">${h}</span>
         <div class="turf">
-          <div class="runner" style="left: ${runnerLeft(from)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${opts.followers ? followers(s, h) : ''}${horseSvg(h)}</div>
+          <div class="runner" style="left: ${runnerLeft(from)}; --pos: ${Math.min(from, pos, FINISH)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${opts.followers ? followers(s, h) : ''}${horseSvg(h)}</div>
         </div>
         <span class="lane-pos">${pos}</span>
         <span class="lane-odds" title="Odds for horse ${h}">${odds(i)}</span>
