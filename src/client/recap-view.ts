@@ -1,7 +1,6 @@
 // End of game: a podium for the top three, the game's biggest moments as
 // cards, and the final leaderboard.
 
-import { START_BALANCE } from '../shared/game';
 import type { PublicPlayer, PublicState } from '../shared/protocol';
 import type { GameRecap, Moment } from '../shared/recap';
 import { horseSvg } from './race';
@@ -64,7 +63,7 @@ export function finalLeaderboard(s: PublicState, recap: GameRecap, you: string, 
   let rank = 0, prev = Infinity;
   return `<ol class="leaders final ${large ? 'large' : ''}">${recap.ranked.map((p, i) => {
     if (p.balance < prev - 1e-9) { rank = i + 1; prev = p.balance; }
-    const profit = p.balance - START_BALANCE;
+    const profit = p.balance - s.startBalance;
     return `
       <li class="${p.id === you ? 'me' : ''}">
         <span class="rank">${rank}</span>

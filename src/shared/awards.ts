@@ -110,7 +110,8 @@ export function roundAwards(s: PublicState): RoundAwards {
     }
     if (staked === 0 && prev > EPS) give(p, { id: 'wallflower', emoji: '🪑', title: 'Wallflower', detail: 'Sat this one out', tone: 'neutral' });
     if (p.balance < 0.01 && prev >= 0.01) give(p, { id: 'busted', emoji: '🪦', title: 'Busted', detail: 'Out of money', tone: 'bad' });
-    if (p.balance >= 200 && prev < 200) give(p, { id: 'double', emoji: '✌️', title: 'Doubled up', detail: 'Over $200', tone: 'good' });
+    const twice = s.startBalance * 2;
+    if (p.balance >= twice && prev < twice) give(p, { id: 'double', emoji: '✌️', title: 'Doubled up', detail: `Over $${twice.toLocaleString('en-US')}`, tone: 'good' });
     const climbed = (before.get(p.id) ?? 0) - (after.get(p.id) ?? 0);
     if (climbed >= 2) give(p, { id: 'comeback', emoji: '🚀', title: 'Comeback', detail: `Up ${climbed} places`, tone: 'good' });
   }

@@ -60,6 +60,8 @@ export interface PublicState {
   hostId: string;
   phase: Phase;
   rounds: number;
+  /** What every player starts the game with. */
+  startBalance: number;
   /** 1-based; 0 before the game starts. */
   round: number;
   players: PublicPlayer[];
@@ -85,7 +87,7 @@ export type ClientMsg =
   | { t: 'hello'; playerId: string; name: string }
   /** Change your display name (until the game starts). */
   | { t: 'rename'; name: string }
-  | { t: 'config'; rounds?: number }
+  | { t: 'config'; rounds?: number; startBalance?: number }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }
   /** Lock in; `bets` (what's on screen) are checked and saved in the same step. */
@@ -106,6 +108,11 @@ export type ServerMsg =
   | { t: 'error'; message: string; fatal?: boolean };
 
 export const MAX_ROUNDS = 50;
+/** Limits on the starting budget the host can pick (whole dollars). */
+export const MIN_BUDGET = 1;
+export const MAX_BUDGET = 1_000_000;
+/** Quick picks for the starting budget. */
+export const BUDGET_PRESETS = [20, 50, 100, 250, 500, 1000];
 /** Largest accepted photo, as a data URL (about 110 KB of JPEG). */
 export const MAX_AVATAR_CHARS = 150_000;
 export const avatarUrl = (code: string, playerId: string, version: number) =>

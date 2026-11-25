@@ -13,7 +13,7 @@ const log = (round: number, winner: number, pool: number, winOdds: number, stake
 
 function game(players: PublicPlayer[], entries: RoundLog[]): PublicState {
   return {
-    code: 'ABCD', hostId: 'host', phase: 'finished', rounds: entries.length, round: entries.length,
+    code: 'ABCD', hostId: 'host', phase: 'finished', rounds: entries.length, startBalance: 100, round: entries.length,
     players, totals: null, mode: null, positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
     manualFinished: false, winner: null, log: entries, hostConnected: true,
   };
@@ -39,7 +39,7 @@ describe('gameRecap', () => {
   });
 
   it('tracks running balances', () => {
-    expect(runningBalances(ann)).toEqual([100, 150, 190, 130, 50]);
+    expect(runningBalances(ann, 100)).toEqual([100, 150, 190, 130, 50]);
   });
 
   it('finds the biggest single win and loss', () => {

@@ -1,7 +1,7 @@
 // A player's phone: bet, see what you'd win, follow the race, check the
 // leaderboard. The host's big screen runs the game.
 
-import { floorCents, HORSES, horseTotals, START_BALANCE, sum, type Bets } from '../shared/game';
+import { floorCents, HORSES, horseTotals, sum, type Bets } from '../shared/game';
 import { MAX_NAME, type PublicPlayer, type PublicState } from '../shared/protocol';
 import { dice, photoFinish, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
@@ -51,7 +51,7 @@ function lobby(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
       </form>` : `
       <h2>You're in, ${esc(me.name)}!</h2>
       <button class="link edit-name" id="editName">✏️ Edit name</button>`}
-      <p class="muted">You have ${money(START_BALANCE)} to bet. Watch the ${bigScreen}: the game starts from there.</p>
+      <p class="muted">You have ${money(s.startBalance)} to bet. Watch the ${bigScreen}: the game starts from there.</p>
       <p class="note">Odds stay hidden until everyone has locked in their bets.</p>
     </div>
     <div class="card">
@@ -230,7 +230,7 @@ function finished(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
   const recap = gameRecap(s);
   const place = recap.ranked.findIndex((p) => p.id === me.id) + 1;
   const mine = recap.moments.filter((m) => m.playerIds.includes(me.id));
-  const profit = me.balance - START_BALANCE;
+  const profit = me.balance - s.startBalance;
   return `
     <div class="card center">
       <p class="muted">You finished</p>

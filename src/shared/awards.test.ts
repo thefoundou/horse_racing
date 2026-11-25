@@ -11,7 +11,7 @@ function player(id: string, balance: number, history: (number | null)[], bets: n
 
 function state(players: PublicPlayer[], winner: number): PublicState {
   return {
-    code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, round: players[0].history.length,
+    code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, startBalance: 100, round: players[0].history.length,
     players, totals: null, mode: 'manual', positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
     manualFinished: true, winner, log: [], hostConnected: true,
   };
@@ -45,6 +45,15 @@ describe('roundAwards', () => {
     const r = roundAwards(state([player('a', 110, [10], [10, 0, 0, 0, 0, 0]), player('b', 100, [0], [0, 0, 0, 0, 0, 0])], 1));
     expect(r.best?.player.id).toBe('a');
     expect(r.worst).toBeNull();
+  });
+
+  it('scales "Doubled up" to the starting budget', () => {
+    const big = (startBalance: number) => {
+      const s = state([player('a', 210, [120], [60, 0, 0, 0, 0, 0]), player('b', 100, [0], [0, 0, 0, 0, 0, 0])], 1);
+      return roundAwards({ ...s, startBalance }).awards.filter((a) => a.id === 'double').map((a) => a.detail);
+    };
+    expect(big(100)).toEqual(['Over $200']);
+    expect(big(500)).toEqual([]);
   });
 
   it('gives a new outright leader the crown', () => {

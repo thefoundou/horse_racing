@@ -3,7 +3,7 @@
 // play; players bet on their phones.
 
 import { FINISH, horseTotals, sum } from '../shared/game';
-import { MAX_ROUNDS, type PublicState } from '../shared/protocol';
+import { BUDGET_PRESETS, MAX_BUDGET, MAX_ROUNDS, type PublicState } from '../shared/protocol';
 import { joinUrl, qrSvg } from './qr';
 import { dice, horseSvg, HORSE_NUMBERS, photoFinish, raceStatus, track } from './race';
 import { roundAwards } from '../shared/awards';
@@ -19,12 +19,14 @@ export interface HostCtx {
   slideFrom: number[] | null;
   /** Show the photo finish up close (after the horses have slid to the line). */
   closeUp: boolean;
+  /** Lobby: the starting budget being typed, or null. */
+  budgetText: string | null;
   /** First showing of this round's results: play the celebration. */
   celebrate: boolean;
 }
 
 export function hostScreen(s: PublicState, c: HostCtx): string {
-  if (s.phase === 'lobby') return lobby(s);
+  if (s.phase === 'lobby') return lobby(s, c);
   if (s.phase === 'betting') return betting(s);
   if (s.phase === 'review') return review(s);
   if (c.showRace) return s.mode === 'manual' ? manual(s, c) : race(s, c);
@@ -32,7 +34,7 @@ export function hostScreen(s: PublicState, c: HostCtx): string {
   return finished(s, c);
 }
 
-function lobby(s: PublicState) {
+function lobby(s: PublicState, c: HostCtx) {
   const n = s.players.length;
   return `
     <div class="tv-lobby">
@@ -59,6 +61,13 @@ function lobby(s: PublicState) {
               <button class="secondary" id="roundsDown" ${s.rounds <= 1 ? 'disabled' : ''} aria-label="Fewer rounds">−</button>
               <span class="value">${s.rounds}</span>
               <button class="secondary" id="roundsUp" ${s.rounds >= MAX_ROUNDS ? 'disabled' : ''} aria-label="More rounds">+</button>
+            </div>
+          </div>
+          <div class="setting budget-setting">
+            <span>Starting budget <span class="muted small">(each player)</span></span>
+            <div class="budget-picks">
+              ${BUDGET_PRESETS.map((b) => `<button class="budget-pick ${s.startBalance === b ? 'on' : ''}" data-budget="${b}" aria-pressed="${s.startBalance === b}">${money(b)}</button>`).join('')}
+              <label class="budget-custom ${BUDGET_PRESETS.includes(s.startBalance) ? '' : 'on'}" title="Any amount up to ${money(MAX_BUDGET)}">$<input id="budgetInput" inputmode="numeric" autocomplete="off" maxlength="7" aria-label="Starting budget in dollars" value="${esc(c.budgetText ?? String(s.startBalance))}" /></label>
             </div>
           </div>
           <p class="muted small">Odds stay hidden until everyone has locked in their bets.</p>

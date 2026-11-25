@@ -47,7 +47,7 @@ function renderLanding(error = '') {
         <div class="herd" aria-hidden="true">${horseSvg(1)}${horseSvg(4)}${horseSvg(3)}</div>
       </div>
       <div class="card center">
-        <p>Everyone starts with <b>${money(START_BALANCE)}</b> of play money. Bet on horses 1–6, race them, and the richest player wins.</p>
+        <p>Everyone starts with the same pot of play money (<b>${money(START_BALANCE)}</b>, unless the host picks another amount). Bet on horses 1–6, race them, and the richest player wins.</p>
       </div>
       <div class="card">
         <h2>Host a game</h2>
@@ -131,6 +131,8 @@ interface Room {
   askPhoto: boolean;
   /** The photo shown on that page (picked now, or remembered from last time). */
   photoPreview: string | null;
+  /** The starting budget being typed on the big screen, or null. */
+  budgetText: string | null;
   /** The name being edited in the lobby, or null. */
   nameDraft: string | null;
   /** A photo waiting to go: kept until the lobby confirms it (phones drop the connection while the camera is open). */
@@ -148,7 +150,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null, nameDraft: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null, nameDraft: null, budgetText: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -436,7 +438,7 @@ function renderRoom(r: Room) {
 
   let body: string;
   const closeUp = !!s.photo && Date.now() >= r.closeUpAt;
-  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, closeUp, celebrate });
+  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, closeUp, budgetText: r.budgetText, celebrate });
   else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, closeUp, celebrate, nameDraft: r.nameDraft });
   else return; // not joined yet
 
@@ -526,6 +528,25 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));
+  // Starting budget: a quick pick, or any whole-dollar amount typed in.
+  app.querySelectorAll<HTMLButtonElement>('[data-budget]').forEach((b) => {
+    b.onclick = () => { r.budgetText = null; send({ t: 'config', startBalance: Number(b.dataset.budget) }); };
+  });
+  const budget = document.getElementById('budgetInput') as HTMLInputElement | null;
+  if (budget) {
+    budget.oninput = () => {
+      const text = budget.value.replace(/[^0-9]/g, '');
+      if (budget.value !== text) budget.value = text;
+      r.budgetText = text;
+    };
+    budget.onchange = () => {
+      const n = Number(budget.value);
+      r.budgetText = null;
+      if (budget.value && n !== s.startBalance) send({ t: 'config', startBalance: n }); // the lobby checks the range
+      else renderRoom(r);
+    };
+    budget.onkeydown = (e) => { if (e.key === 'Enter') budget.blur(); };
+  }
   // Lock in exactly what's on screen: the bets travel with the lock, and if
   // they aren't valid the lobby says so and you stay unlocked.
   on('lock', () => { clearTimeout(r.sendTimer); if (r.draft) send({ t: 'lock', bets: r.draft }); });

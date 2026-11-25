@@ -389,6 +389,13 @@ body.tv h2 { font-size: 1.2rem; }
 .join-url { font-size: 1.6rem; font-weight: 700; margin: 0 0 4px; }
 body.tv .room-code { font-size: clamp(3rem, 6vw, 5.5rem); }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.budget-setting { flex-wrap: wrap; margin: 14px 0 4px; }
+.budget-picks { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.budget-pick { padding: 8px 12px; background: var(--paper); border: 2px solid var(--ink); color: var(--ink); font-size: 0.95rem; letter-spacing: 0.02em; }
+.budget-pick.on { background: var(--ink); color: var(--gold); }
+.budget-custom { display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; border: 2px dashed var(--ink); border-radius: 4px; font-weight: 700; }
+.budget-custom.on { border-style: solid; background: var(--ink); color: var(--gold); }
+.budget-custom input { width: 6ch; border: 0; padding: 7px 2px; background: transparent; color: inherit; font-weight: 700; text-align: right; font-size: 0.95rem; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .row-between h2 { margin: 0; }
 .name-chips { display: flex; flex-wrap: wrap; gap: 8px; }

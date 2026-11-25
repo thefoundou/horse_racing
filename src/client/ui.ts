@@ -1,6 +1,5 @@
 // Small rendering helpers shared by the host screen and the player phones.
 
-import { START_BALANCE } from '../shared/game';
 import { avatarUrl, type PublicPlayer, type PublicState } from '../shared/protocol';
 
 export const app = document.getElementById('app')!;
@@ -106,13 +105,13 @@ export function historyTable(s: PublicState) {
   const rounds = Math.max(0, ...s.players.map((p) => p.history.length));
   const head = Array.from({ length: rounds }, (_, i) => `<th>R${i + 1}</th><th>Σ${i + 1}</th>`).join('');
   const rows = ranked.map((p) => {
-    let bal = START_BALANCE;
+    let bal = s.startBalance;
     const cells = Array.from({ length: rounds }, (_, i) => {
       const n = p.history[i];
       if (n != null) bal += n;
       return `<td class="${cls(n ?? 0)}">${n == null ? '–' : money(n, true)}</td><td>${money(bal)}</td>`;
     }).join('');
-    return `<tr><td class="name">${esc(p.name)}</td><td>${money(START_BALANCE)}</td>${cells}</tr>`;
+    return `<tr><td class="name">${esc(p.name)}</td><td>${money(s.startBalance)}</td>${cells}</tr>`;
   }).join('');
   return `<div class="scroll"><table class="table grid"><thead><tr><th></th><th>Start</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
