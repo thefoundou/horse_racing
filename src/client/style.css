@@ -225,14 +225,15 @@ details[open].card summary { margin-bottom: 10px; }
 .track {
   --follow-w: 0px;
   --k: 2;
-  --side: calc(32px + 1.6em + 2ch); /* lane padding, gaps, gate and count */
+  --odds-w: 3.1rem;
+  --side: calc(40px + 1.6em + 2ch + var(--odds-w)); /* lane padding, gaps, gate, count and odds */
   --unit: calc((100cqw - var(--side) - var(--follow-w)) / (var(--k) + 10));
   --lane-h: calc(var(--unit) * var(--k) * 0.62 + 8px);
   container-type: inline-size;
   display: flex; flex-direction: column; gap: 0; border-radius: 6px; overflow: hidden;
   background: var(--turf-a); padding: 0 0 6px; box-shadow: 0 6px 18px #1f2b2e2e;
 }
-.track.large { --k: 1; --side: calc(32px + 1.76em + 2.2ch); }
+.track.large { --k: 1; --odds-w: 4.8rem; --side: calc(40px + 1.76em + 2.2ch + var(--odds-w)); }
 .track.followers-on { --follow-w: clamp(100px, 10vw, 180px); }
 .ruler, .lane { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .ruler {
@@ -295,6 +296,15 @@ details[open].card summary { margin-bottom: 10px; }
 .lane.leading .gate { box-shadow: 0 0 0 2px var(--paper); }
 .lane-pos { width: 2ch; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--paper); flex: none; }
 .track.large .lane-pos, .track.large .gate { font-size: 1.1rem; }
+/* The odds, at the end of each lane: what the horse pays if it wins. */
+.lane-odds {
+  width: var(--odds-w); flex: none; text-align: center; font-weight: 700; font-size: 0.75rem; font-variant-numeric: tabular-nums;
+  background: var(--ink); color: var(--gold); border-radius: 3px; padding: 2px 0; white-space: nowrap; overflow: hidden;
+}
+.track.large .lane-odds { font-size: 1.15rem; padding: 4px 0; }
+.ruler .lane-odds { background: none; color: var(--ink); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; padding: 0; }
+.track.large .ruler .lane-odds { font-size: 0.8rem; }
+.lane.won .lane-odds { background: var(--gold); color: var(--ink); }
 @keyframes victory { to { transform: translateY(-6px); } }
 
 /* The horse. Legs pivot at the hip and swing while the race is running. */
@@ -592,6 +602,7 @@ body.tv .moment-who .avatar { width: 60px; height: 60px; }
   animation: pf-neck 0.7s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -0.23s);
 }
 @keyframes pf-neck { from { translate: -2.2cqw 0; } to { translate: 1.4cqw 0; } }
+.pf-odds { position: absolute; left: calc(16px + 1.8em); bottom: calc(var(--w) * 0.06); width: auto; padding: 2px 6px; z-index: 1; font-size: clamp(0.75rem, 2.6cqw, 1.2rem); }
 .pf-lane.mine .steed { filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 8px var(--gold)); }
 /* Decided: the winner surges over the line… */
 .pf-win .pf-runner { animation: pf-surge 1.1s cubic-bezier(.3,0,.2,1) forwards; filter: drop-shadow(0 0 10px var(--gold)); }
