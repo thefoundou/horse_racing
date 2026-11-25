@@ -153,9 +153,7 @@ export class Lobby extends DurableObject<Env> {
     const existing = s.players.find((p) => p.id === id);
     if (existing) return id; // rejoining (refresh, new tab, dropped connection)
 
-    const name = typeof rawName === 'string' ? rawName.trim().replace(/\s+/g, ' ').slice(0, MAX_NAME) : '';
-    if (!name) fail('Pick a display name.');
-    if (s.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) fail(`"${name}" is taken in this lobby.`);
+    const name = this.cleanName(s, rawName, id);
     if (s.players.length >= MAX_PLAYERS) fail('This lobby is full.');
 
     // Joining mid-game: you start with $100 and sit out any round whose
@@ -167,6 +165,14 @@ export class Lobby extends DurableObject<Env> {
       history: Array(roundsDone).fill(null),
     });
     return id;
+  }
+
+  /** A tidy display name nobody else in the lobby is using. */
+  private cleanName(s: State, rawName: unknown, id: string): string {
+    const name = typeof rawName === 'string' ? rawName.trim().replace(/\s+/g, ' ').slice(0, MAX_NAME) : '';
+    if (!name) fail('Pick a display name.');
+    if (s.players.some((p) => p.id !== id && p.name.toLowerCase() === name.toLowerCase())) fail(`"${name}" is taken in this lobby.`);
+    return name;
   }
 
   private act(s: State, player: Player | null, isHost: boolean, msg: ClientMsg): void {
@@ -185,6 +191,12 @@ export class Lobby extends DurableObject<Env> {
         }
         return;
       }
+      case 'rename':
+        self();
+        if (s.phase !== 'lobby') fail('Names are fixed once the game has started.');
+        me.name = this.cleanName(s, msg.name, me.id);
+        return;
+
       case 'start':
         host(); phase('lobby');
         if (!s.players.length) fail('Wait for at least one player to join.');
