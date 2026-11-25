@@ -1,8 +1,8 @@
 // The digital race: a turf track with a galloping horse per lane.
 
-import { FINISH, HORSES } from '../shared/game';
+import { FINISH, HORSES, sum } from '../shared/game';
 import type { PublicState } from '../shared/protocol';
-import { avatar, esc } from './ui';
+import { avatar, esc, oddsText } from './ui';
 
 const COAT = ['#8a4b25', '#5e3a22', '#a0602f', '#3f2a1c', '#7b4a2c', '#6b3d1f'];
 const MANE = ['#2e1b0f', '#1f130b', '#3a2213', '#120c07', '#2a180c', '#24150b'];
@@ -72,6 +72,9 @@ export function track(
   const running = s.phase === 'racing' && !s.winner;
   const lead = Math.max(...s.positions);
   const marks = '<span class="start-label">Start</span>' + Array.from({ length: FINISH }, (_, i) => `<span>${i + 1}</span>`).join('');
+  // Each horse's odds (pool ÷ money on it), known once betting has closed.
+  const pool = s.totals ? sum(s.totals) : 0;
+  const odds = (i: number) => (s.totals && s.totals[i] > 0 ? oddsText(pool / s.totals[i]) : '—');
   const lanes = s.positions.map((pos, i) => {
     const h = i + 1;
     const from = opts.from?.[i] ?? pos;
@@ -83,11 +86,12 @@ export function track(
           <div class="runner" style="left: ${runnerLeft(from)}"${from !== pos ? ` data-to="${runnerLeft(pos)}"` : ''}>${opts.followers ? followers(s, h) : ''}${horseSvg(h)}</div>
         </div>
         <span class="lane-pos">${pos}</span>
+        <span class="lane-odds" title="Odds for horse ${h}">${odds(i)}</span>
       </div>`;
   }).join('');
   return `
     <div class="track ${opts.big ? 'large' : ''} ${opts.followers ? 'followers-on' : ''} ${running ? 'running' : ''}">
-      <div class="ruler"><span class="gate-sp"></span><div class="marks">${marks}</div><span class="lane-pos"></span></div>
+      <div class="ruler"><span class="gate-sp"></span><div class="marks">${marks}</div><span class="lane-pos"></span><span class="lane-odds">Odds</span></div>
       ${lanes}
     </div>`;
 }
@@ -136,6 +140,7 @@ export function photoFinish(s: PublicState, opts: { big?: boolean; mine?: number
     return `
       <div class="pf-lane ${state} ${(opts.mine?.[h - 1] ?? 0) > 0 ? 'mine' : ''}" style="--i:${i}">
         <span class="gate h${h}">${h}</span>
+        <span class="lane-odds pf-odds">${s.totals && s.totals[h - 1] > 0 ? oddsText(sum(s.totals) / s.totals[h - 1]) : '—'}</span>
         <div class="pf-runner">${horseSvg(h)}</div>
         ${state === 'pf-lose' ? `<div class="pf-boom" aria-hidden="true"><span>💥</span>${debris}</div>` : ''}
       </div>`;
