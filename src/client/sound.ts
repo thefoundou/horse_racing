@@ -2,6 +2,7 @@
 // API (no recordings to load or license): a bugle fanfare for the start,
 // galloping hooves and huffs as horses move, whinnies and snorts now and
 // then, a crowd cheering the winner, and a cash register as bets go in.
+// The whinny and the cash register are real recordings (public/sounds).
 //
 // Browsers only allow sound after the page has been clicked or tapped, so
 // the context is created on the first click (the host clicks plenty).
@@ -49,6 +50,7 @@ export function unlockAudio(): void {
     ac = ctx;
     out = master;
     loadNeigh(); // fetch the recorded whinny ready for the race
+    loadTill(); // and the cash register for bets
   }
   if (ctx.state === 'suspended') void ctx.resume();
 }
@@ -336,10 +338,35 @@ function register(t: number) {
   clack(b + 0.2, 0.25, 1200);
 }
 
+/**
+ * The real thing: a recorded mechanical cash register (CC BY-SA 4.0, see
+ * public/sounds/CREDITS.md). Until it has loaded, the synthesised one plays.
+ */
+let till: AudioBuffer | null = null;
+let tillLoading = false;
+
+function loadTill(): void {
+  if (till || tillLoading || !ac) return;
+  tillLoading = true;
+  fetch('/sounds/register.m4a')
+    .then((r) => r.arrayBuffer())
+    .then((b) => ac!.decodeAudioData(b))
+    .then((buf) => { till = buf; })
+    .catch(() => { tillLoading = false; }); // try again next time
+}
+
 /** Cha-ching! Someone's bet is in. */
 export function playRegister(): void {
   if (!ready()) return;
-  register(ac!.currentTime + 0.02);
+  const t = ac!.currentTime + 0.02;
+  if (!till) { loadTill(); return register(t); }
+  const src = ac!.createBufferSource();
+  src.buffer = till;
+  src.playbackRate.value = 0.95 + Math.random() * 0.1; // a slightly different till each time
+  const g = ac!.createGain();
+  g.gain.value = 0.7;
+  src.connect(g).connect(out!);
+  src.start(t);
 }
 
 // ---- The finish: the crowd goes wild --------------------------------------------
