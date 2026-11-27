@@ -29,7 +29,7 @@ export function playerScreen(s: PublicState, me: PublicPlayer, c: PlayerCtx): st
   if (s.phase === 'lobby') return lobby(s, me, c);
   if (s.phase === 'betting') return betting(s, me, c);
   if (s.phase === 'review') return review(s, me);
-  if (c.showRace) return s.mode === 'manual' ? manual(s) : race(s, me, c);
+  if (c.showRace) return s.mode === 'manual' ? manual(s, me) : race(s, me, c);
   if (s.phase === 'results') return results(s, me, c);
   return finished(s, me, c);
 }
@@ -152,7 +152,8 @@ export function patchBetting(s: PublicState, me: PublicPlayer, c: PlayerCtx): vo
   if (status && status.innerHTML !== html) status.innerHTML = html;
 }
 
-function review(s: PublicState, me: PublicPlayer) {
+/** Your bets with each horse's odds and what you'd get back: shown once bets are in and during a manual race. */
+function myBetsCard(s: PublicState, me: PublicPlayer, title: string) {
   const totals = horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets ?? []));
   const p = sum(totals);
   const mine = me.bets ?? Array(HORSES).fill(0);
@@ -167,14 +168,18 @@ function review(s: PublicState, me: PublicPlayer) {
   }).join('');
   return `
     <div class="card">
-      <h2>Bets are in · pool ${money(p)}</h2>
+      <h2>${title} · pool ${money(p)}</h2>
       ${me.playing ? `<p class="muted">You staked ${money(myStake)}. If this horse wins, you get back:</p>` : '<p class="muted">You\'re sitting this round out.</p>'}
       <div class="scroll"><table class="table">
         <thead><tr><th>Horse</th><th>Odds</th><th>Your bet</th><th>You get</th><th>Net</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>
-    <details class="card"><summary><h2>Everyone's bets</h2></summary>${betsTable(s)}</details>
+    <details class="card"><summary><h2>Everyone's bets</h2></summary>${betsTable(s)}</details>`;
+}
+
+function review(s: PublicState, me: PublicPlayer) {
+  return `${myBetsCard(s, me, 'Bets are in')}
     <p class="waiting">The race starts on the ${bigScreen}…</p>`;
 }
 
@@ -197,13 +202,14 @@ function race(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
     ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;
 }
 
-function manual(s: PublicState) {
+function manual(s: PublicState, me: PublicPlayer) {
   return `
     <div class="card center">
       <div class="logo" aria-hidden="true">🏁</div>
       <h2>${s.manualFinished ? 'Race over' : "They're off!"}</h2>
       <p class="waiting">${s.manualFinished ? 'The host is picking the winner…' : 'Watch the race!'}</p>
-    </div>`;
+    </div>
+    ${myBetsCard(s, me, 'Your bets')}`;
 }
 
 function results(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
