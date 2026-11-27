@@ -13,7 +13,7 @@ function state(players: PublicPlayer[], winner: number): PublicState {
   return {
     code: 'ABCD', hostId: 'host', phase: 'results', rounds: 6, startBalance: 100, photoEveryRound: false, round: players[0].history.length,
     players, totals: null, mode: 'manual', positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
-    manualFinished: true, winner, log: [], hostConnected: true,
+    manualFinished: true, winner, log: [], hostConnected: true, lineup: null, chat: [],
   };
 }
 

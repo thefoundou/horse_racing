@@ -13,6 +13,7 @@ import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
+import { hideChat, updateChat } from './chat';
 import { crowdSwell, playAww, playBoom, playBugle, playCheer, playDieRoll, playGallop, playRegister, playShutters, playTumble, startCrowd, stopCrowd, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
 import { app, esc, money, r2, render, store, toast } from './ui';
 import { floorCents } from '../shared/game';
@@ -162,6 +163,7 @@ function enterRoom(code: string) {
 
 function leaveRoom() {
   document.body.classList.remove('tv');
+  hideChat();
   if (!room) return;
   room.closed = true;
   clearInterval(room.autoRoll);
@@ -328,6 +330,17 @@ function onState(r: Room, s: PublicState, you: string) {
   betSounds(prev, s, you);
   r.lastPhase = s.phase;
   renderRoom(r);
+  syncChat(r);
+}
+
+/** Keep the chat (panel and pop-up bubbles) up to date with the lobby. */
+function syncChat(r: Room) {
+  const s = r.state;
+  if (!s) return;
+  const isHost = s.hostId === r.you;
+  const joined = isHost || s.players.some((p) => p.id === r.you);
+  const racing = s.phase === 'racing' || (s.phase === 'results' && Date.now() < r.holdRaceUntil);
+  updateChat(s, r.you, { isHost, racing, visible: joined && !(r.askPhoto && !isHost), sendChat: (text) => send({ t: 'chat', text }) });
 }
 
 /**
@@ -468,7 +481,7 @@ function renderPhotoStep(r: Room, s: PublicState, me: PublicPlayer) {
     r.photoPreview = photo;
     renderRoom(r);
   };
-  const done = () => { r.askPhoto = false; r.photoPreview = null; store.set(askPhotoKey(r.code), false); renderRoom(r); };
+  const done = () => { r.askPhoto = false; r.photoPreview = null; store.set(askPhotoKey(r.code), false); renderRoom(r); syncChat(r); };
   for (const id of ['pickPhoto', 'pickPhotoBtn', 'pickAgain']) document.getElementById(id)?.addEventListener('click', pick);
   document.getElementById('skipPhoto')!.onclick = done;
   document.getElementById('usePhoto')?.addEventListener('click', () => {

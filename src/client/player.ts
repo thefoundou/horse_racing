@@ -3,7 +3,8 @@
 
 import { floorCents, HORSES, horseTotals, sum, type Bets } from '../shared/game';
 import { MAX_NAME, type PublicPlayer, type PublicState } from '../shared/protocol';
-import { dice, photoFinish, raceStatus, track } from './race';
+import { dice, horseSvg, photoFinish, raceStatus, track } from './race';
+import { ANIMAL_LABEL } from '../shared/lineup';
 import { roundAwards } from '../shared/awards';
 import { gameRecap } from '../shared/recap';
 import { finalLeaderboard, moments, podium } from './recap-view';
@@ -94,12 +95,14 @@ function betting(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
     <div class="bet-card ${m.mine[h] > 0 ? 'backed' : ''}" id="betcard${h}">
       <div class="bet-head">
         ${horse(h + 1, 'lg')}
+        ${s.lineup ? `<span class="bet-steed">${horseSvg(h + 1, s.lineup[h])}</span>` : ''}
         <div class="bet-odds">
           ${m.hidden ? '<span class="odds muted">?</span><span class="muted small">Odds hidden</span>' : `
           <span class="odds" id="odds${h}">${oddsText(m.odds[h])}</span>
           <span class="muted small" id="total${h}">${money(m.totals[h])} on #${h + 1}</span>`}
         </div>
       </div>
+      ${s.lineup ? `<p class="bet-fact">${s.lineup[h].animal !== 'horse' ? `<b>${ANIMAL_LABEL[s.lineup[h].animal]}!</b> ` : ''}${esc(s.lineup[h].animalFact)} ${esc(s.lineup[h].jockeyFact)}</p>` : ''}
       <div class="bet-input">
         <button class="secondary sm" data-step="${h}" data-d="-5" id="down${h}" ${m.locked || m.mine[h] <= 0 ? 'disabled' : ''} aria-label="Bet $5 less on ${h + 1}">−5</button>
         <span class="dollar">$<input id="bet${h}" data-bet="${h}" type="text" inputmode="decimal" autocomplete="off" value="${esc(m.locked ? (m.mine[h] ? String(r2(m.mine[h])) : '') : c.draftText[h] ?? '')}" placeholder="0" ${m.locked ? 'disabled' : ''} aria-label="Bet on horse ${h + 1}" /></span>

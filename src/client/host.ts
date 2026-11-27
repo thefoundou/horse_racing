@@ -10,6 +10,7 @@ import { roundAwards } from '../shared/awards';
 import { gameRecap } from '../shared/recap';
 import { finalLeaderboard, gameStats, moments, podium } from './recap-view';
 import { awardChips, liveLeaderboard, spotlight } from './awards-view';
+import { ANIMAL_LABEL } from '../shared/lineup';
 import { avatar, betsTable, esc, historyTable, money, oddsText } from './ui';
 
 export interface HostCtx {
@@ -85,17 +86,19 @@ function lobby(s: PublicState, c: HostCtx) {
     </div>`;
 }
 
-/** One board per horse: the horse, its odds and the money on it. */
-function oddsBoard(totals: number[] | null) {
+/** One board per runner: the animal and jockey, their fun facts, the odds and the money on it. */
+function oddsBoard(s: PublicState, totals: number[] | null) {
   const p = totals ? sum(totals) : 0;
   return `<div class="odds-board">${HORSE_NUMBERS.map((h) => {
     const t = totals?.[h - 1] ?? 0;
     const o = t === 0 ? 0 : p / t;
+    const r = s.lineup?.[h - 1];
     return `
-      <div class="odds-card">
-        <div class="odds-horse">${horseSvg(h)}</div>
+      <div class="odds-card ${r && r.animal !== 'horse' ? `rare animal-${r.animal}` : ''}">
+        <div class="odds-horse">${horseSvg(h, r)}${r && r.animal !== 'horse' ? `<span class="rare-tag">${ANIMAL_LABEL[r.animal]}!</span>` : ''}</div>
         <div class="odds-big">${totals ? oddsText(o) : '?'}</div>
         <div class="muted">${totals ? `${money(t)} on #${h}` : 'Odds hidden'}</div>
+        ${r ? `<div class="odds-facts"><p>${esc(r.animalFact)}</p><p>${esc(r.jockeyFact)}</p></div>` : ''}
       </div>`;
   }).join('')}</div>
   <p class="pool">${totals ? `Pool <b>${money(p)}</b>` : 'Odds and pool are revealed when everyone has locked in.'}</p>`;
@@ -105,7 +108,7 @@ function betting(s: PublicState) {
   const waiting = s.players.filter((p) => p.playing && !p.locked).length;
   return `
     <h1 class="tv-title">Place your bets on your phone</h1>
-    ${oddsBoard(s.totals)}
+    ${oddsBoard(s, s.totals)}
     <div class="card">
       <div class="row-between">
         <h2>${waiting ? `Waiting on ${waiting} ${waiting === 1 ? 'player' : 'players'}` : 'Everyone is locked in'}</h2>
@@ -122,7 +125,7 @@ function review(s: PublicState) {
   const totals = horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets ?? []));
   return `
     <h1 class="tv-title">Bets are in!</h1>
-    ${oddsBoard(totals)}
+    ${oddsBoard(s, totals)}
     <div class="tv-two">
       <div class="card"><h2>Everyone's bets</h2>${betsTable(s)}</div>
       <div class="card">
@@ -175,7 +178,7 @@ function manual(s: PublicState, c: HostCtx) {
     <div class="card center tv-hero">
       <h1>Which horse won?</h1>
       <div class="pick large">${HORSE_NUMBERS.map((h) =>
-        `<button class="pick-btn ${c.manualPick === h ? 'on' : ''}" data-pick="${h}" aria-label="Horse ${h}">${horseSvg(h)}</button>`).join('')}</div>
+        `<button class="pick-btn ${c.manualPick === h ? 'on' : ''}" data-pick="${h}" aria-label="Horse ${h}">${horseSvg(h, s.lineup?.[h - 1])}</button>`).join('')}</div>
       <button class="primary big narrow" id="confirmWinner" ${c.manualPick ? '' : 'disabled'}>${c.manualPick ? `Horse ${c.manualPick} won` : 'Pick a horse'}</button>
     </div>`;
 }
@@ -187,7 +190,7 @@ function results(s: PublicState, c: HostCtx) {
   const aw = roundAwards(s);
   return `
     <div class="result-strip h${w}-bg">
-      <div class="strip-horse">${horseSvg(w)}</div>
+      <div class="strip-horse">${horseSvg(w, s.lineup?.[w - 1])}</div>
       <div class="strip-title">Horse ${w} wins!</div>
       ${totals[w - 1] === 0 ? `<div class="strip-note">Nobody backed horse ${w}: every stake is lost.</div>` : ''}
     </div>
