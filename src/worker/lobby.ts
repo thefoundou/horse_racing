@@ -8,9 +8,10 @@ import {
   applyRoll, cents, emptyBets, HORSES, horseTotals, net, photoContenders, photoWinner, raceWinner, rollDice, rollDie, rollForPhotoFinish, START_BALANCE, sum,
   tidy, validateBets, type Bets,
 } from '../shared/game';
+import { makeLineup, type Runner } from '../shared/lineup';
 import {
-  MAX_AVATAR_CHARS, MAX_BUDGET, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS, MIN_BUDGET,
-  type ClientMsg, type Phase, type PhotoFinish, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
+  CHAT_KEEP, MAX_AVATAR_CHARS, MAX_CHAT, MAX_BUDGET, MAX_NAME, MAX_PLAYERS, MAX_ROUNDS, MIN_BUDGET,
+  type ChatMsg, type ClientMsg, type Phase, type PhotoFinish, type PublicState, type RaceMode, type RoundLog, type ServerMsg,
 } from '../shared/protocol';
 
 interface Player {
@@ -45,6 +46,10 @@ interface State {
   manualFinished: boolean;
   winner: number | null; // 1..6
   log?: RoundLog[];
+  /** This round's runners (animals, outfits, fun facts). */
+  lineup?: Runner[];
+  chat?: ChatMsg[];
+  chatSeq?: number;
 }
 
 interface Attachment { playerId: string | null }
@@ -60,6 +65,8 @@ export class Lobby extends DurableObject<Env> {
   private state: State | null = null;
   /** A photo from the message being handled, written by save(). */
   private pendingAvatar: { id: string; bytes: Uint8Array } | null = null;
+  /** When each player last chatted (to slow down floods; not saved). */
+  private lastChat = new Map<string, number>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -303,6 +310,17 @@ export class Lobby extends DurableObject<Env> {
         s.log = [];
         return;
 
+      case 'chat': {
+        self();
+        const text = typeof msg.text === 'string' ? msg.text.replace(/\s+/g, ' ').trim().slice(0, MAX_CHAT) : '';
+        if (!text) fail('Type a message first.');
+        const now = Date.now();
+        if (now - (this.lastChat.get(me.id) ?? 0) < 800) fail('Slow down a little!');
+        this.lastChat.set(me.id, now);
+        s.chatSeq = (s.chatSeq ?? 0) + 1;
+        s.chat = [...(s.chat ?? []), { id: s.chatSeq, from: me.id, text, at: now }].slice(-CHAT_KEEP);
+        return;
+      }
       case 'avatar': {
         self();
         const prefix = 'data:image/jpeg;base64,';
@@ -327,6 +345,7 @@ export class Lobby extends DurableObject<Env> {
 
   private beginRound(s: State): void {
     s.phase = 'betting';
+    s.lineup = makeLineup();
     s.mode = null;
     s.positions = Array(HORSES).fill(0);
     s.lastRoll = null;
@@ -396,7 +415,7 @@ export class Lobby extends DurableObject<Env> {
       // Odds stay secret while betting: withheld from the wire, not just the screen.
       totals: s.phase === 'betting' ? null : horseTotals(s.players.filter((p) => p.playing).map((p) => p.bets)),
       mode: s.mode, positions: s.positions, lastRoll: s.lastRoll, rollCount: s.rollCount, photo: s.photo ?? null,
-      manualFinished: s.manualFinished, winner: s.winner, log: s.log ?? [], hostConnected: online.has(s.hostId),
+      manualFinished: s.manualFinished, winner: s.winner, log: s.log ?? [], hostConnected: online.has(s.hostId), lineup: s.lineup ?? null, chat: s.chat ?? [],
     };
   }
 

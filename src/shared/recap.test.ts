@@ -15,7 +15,7 @@ function game(players: PublicPlayer[], entries: RoundLog[]): PublicState {
   return {
     code: 'ABCD', hostId: 'host', phase: 'finished', rounds: entries.length, startBalance: 100, photoEveryRound: false, round: entries.length,
     players, totals: null, mode: null, positions: [0, 0, 0, 0, 0, 0], lastRoll: null, rollCount: 0, photo: null,
-    manualFinished: false, winner: null, log: entries, hostConnected: true,
+    manualFinished: false, winner: null, log: entries, hostConnected: true, lineup: null, chat: [],
   };
 }
 

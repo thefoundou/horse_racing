@@ -1,6 +1,7 @@
 // Messages between the browser and a lobby's Durable Object, over WebSocket.
 
 import type { Bets } from './game';
+import type { Runner } from './lineup';
 
 export type Phase =
   | 'lobby'     // waiting for players; host picks the number of rounds
@@ -38,6 +39,16 @@ export interface PhotoFinish {
   horses: number[];
   /** Each single die rolled so far; the last decides it once it shows a contender. */
   rolls: number[];
+}
+
+/** A chat message in the lobby. */
+export interface ChatMsg {
+  id: number;
+  /** The player who sent it. */
+  from: string;
+  text: string;
+  /** When it was sent (ms since the epoch). */
+  at: number;
 }
 
 /** What happened in one finished round, kept for the end-of-game recap. */
@@ -83,6 +94,10 @@ export interface PublicState {
   log: RoundLog[];
   /** Is the host's big screen connected? (The host runs the game but doesn't play.) */
   hostConnected: boolean;
+  /** This round's runners: animals, jockeys' outfits and fun facts (null before the first round). */
+  lineup: Runner[] | null;
+  /** The latest chat messages, oldest first. */
+  chat: ChatMsg[];
 }
 
 export type ClientMsg =
@@ -102,6 +117,8 @@ export type ClientMsg =
   | { t: 'winner'; horse: number }
   | { t: 'next' }
   | { t: 'playAgain' }
+  /** Say something in the lobby chat. */
+  | { t: 'chat'; text: string }
   /** A profile photo as a JPEG data URL (the browser crops and shrinks it first). */
   | { t: 'avatar'; data: string };
 
@@ -110,6 +127,9 @@ export type ServerMsg =
   | { t: 'error'; message: string; fatal?: boolean };
 
 export const MAX_ROUNDS = 50;
+/** Longest chat message, and how many the lobby keeps. */
+export const MAX_CHAT = 120;
+export const CHAT_KEEP = 40;
 /** Limits on the starting budget the host can pick (whole dollars). */
 export const MIN_BUDGET = 1;
 export const MAX_BUDGET = 1_000_000;
