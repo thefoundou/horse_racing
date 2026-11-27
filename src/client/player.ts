@@ -77,8 +77,13 @@ function bettingModel(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
   return { locked, mine, hidden, totals, pool, odds, staked, left, waitingOn };
 }
 
+/** Who's locked in, richest first (by what they had at the start of the round). */
 const statusList = (s: PublicState, me: PublicPlayer) =>
-  playerList(s, (x) => !x.playing ? 'sitting out' : x.locked ? '<span class="ok">✓ locked in</span>' : 'betting…', me.id);
+  playerList(
+    { ...s, players: s.players.slice().sort((a, b) => b.budget - a.budget) },
+    (x) => `<span class="muted">${money(x.budget)}</span> · ${!x.playing ? 'sitting out' : x.locked ? '<span class="ok">✓ locked in</span>' : 'betting…'}`,
+    me.id,
+  );
 const waitingText = (n: number) => `Waiting on ${n} ${n === 1 ? 'player' : 'players'}`;
 
 /**
