@@ -2,7 +2,8 @@
 // API (no recordings to load or license): a bugle fanfare for the start,
 // galloping hooves and huffs as horses move, whinnies and snorts now and
 // then, a crowd cheering the winner, and a cash register as bets go in.
-// The whinny and the cash register are real recordings (public/sounds).
+// The whinnies, cash registers and coins are real recordings (public/sounds,
+// credits in its CREDITS.md); everything else is synthesised.
 //
 // Browsers only allow sound after the page has been clicked or tapped, so
 // the context is created on the first click (the host clicks plenty).
@@ -30,7 +31,7 @@ export function setSound(on: boolean): void {
   enabled = on;
   store.set('hr:sound', on);
   if (master && ctx) master.gain.setTargetAtTime(on ? 0.8 : 0, ctx.currentTime, 0.05);
-  if (!on) stopRaceAmbience();
+  if (!on) { stopRaceAmbience(); stopCrowd(0.1); }
 }
 
 /** Create or wake the audio context. Call from a click handler. */
@@ -49,13 +50,55 @@ export function unlockAudio(): void {
     noise = makeNoise(ctx);
     ac = ctx;
     out = master;
-    loadNeigh(); // fetch the recorded whinny ready for the race
-    loadTill(); // and the cash register for bets
+    loadAll(); // fetch the recordings: whinnies for the race, registers and coins for bets
   }
   if (ctx.state === 'suspended') void ctx.resume();
 }
 
 const ready = () => !!ctx && !!master && enabled && ctx.state === 'running';
+
+// ---- Recordings ---------------------------------------------------------------
+
+/** The recordings in public/sounds (see its CREDITS.md). */
+const FILES = {
+  neigh: 'neigh.m4a', stallion1: 'stallion1.m4a', stallion2: 'stallion2.m4a', stallion3: 'stallion3.m4a', stallion4: 'stallion4.m4a',
+  till: 'register.m4a', clunk: 'register-clunk.m4a', coins: 'coins.m4a',
+} as const;
+type Rec = keyof typeof FILES;
+const WHINNIES: Rec[] = ['neigh', 'stallion1', 'stallion2', 'stallion3', 'stallion4'];
+const STALLIONS: Rec[] = ['stallion1', 'stallion2', 'stallion3', 'stallion4'];
+/** Where the sound starts in recordings with a quiet lead-in (seconds). */
+const LEAD_IN: Partial<Record<Rec, number>> = { coins: 0.4, stallion4: 0.55 };
+const buffers = new Map<Rec, AudioBuffer>();
+const loading = new Set<Rec>();
+
+function load(name: Rec): void {
+  if (buffers.has(name) || loading.has(name) || !ac) return;
+  loading.add(name);
+  fetch('/sounds/' + FILES[name])
+    .then((r) => r.arrayBuffer())
+    .then((b) => ac!.decodeAudioData(b))
+    .then((buf) => { buffers.set(name, buf); })
+    .catch(() => { loading.delete(name); }); // try again next time
+}
+function loadAll(): void { (Object.keys(FILES) as Rec[]).forEach(load); }
+
+/** Play a recording at time t; false if it hasn't loaded yet. */
+function play(name: Rec, t: number, opts: { rate?: number; gain?: number } = {}): boolean {
+  const buf = buffers.get(name);
+  if (!buf) { load(name); return false; }
+  const src = ac!.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = opts.rate ?? 1;
+  const g = ac!.createGain();
+  g.gain.value = opts.gain ?? 0.7;
+  src.connect(g).connect(out!);
+  src.start(t, LEAD_IN[name] ?? 0);
+  return true;
+}
+const pick = <T,>(xs: T[]): T | undefined => xs[Math.floor(Math.random() * xs.length)];
+/** Are all these recordings loaded? (Starts loading any that aren't.) */
+const has = (...names: Rec[]) => names.every((n) => buffers.has(n) || (load(n), false));
 
 // ---- Building blocks ------------------------------------------------------
 
@@ -173,28 +216,11 @@ export function playGallop(horsesMoving: number, seconds = 1.4): void {
  * A whinny: a real recording (public domain, see public/sounds/CREDITS.md),
  * played a little faster or slower each time so repeats don't sound the same.
  */
-let neigh: AudioBuffer | null = null;
-let neighLoading = false;
-
-function loadNeigh(): void {
-  if (neigh || neighLoading || !ac) return;
-  neighLoading = true;
-  fetch('/sounds/neigh.m4a')
-    .then((r) => r.arrayBuffer())
-    .then((b) => ac!.decodeAudioData(b))
-    .then((buf) => { neigh = buf; })
-    .catch(() => { neighLoading = false; }); // try again next time
-}
-
 function whinny(t: number) {
-  if (!neigh) { loadNeigh(); return nicker(t); } // not loaded yet: a nicker instead
-  const src = ac!.createBufferSource();
-  src.buffer = neigh;
-  src.playbackRate.value = 0.88 + Math.random() * 0.24; // a different horse each time
-  const g = ac!.createGain();
-  g.gain.value = 0.55 + Math.random() * 0.25;
-  src.connect(g).connect(out!);
-  src.start(t);
+  // A real recording (one of several horses), a little faster or slower each time.
+  const horse = pick(WHINNIES.filter((n) => buffers.has(n)));
+  if (!horse) { WHINNIES.forEach(load); return nicker(t); } // not loaded yet: a nicker instead
+  play(horse, t, { rate: 0.88 + Math.random() * 0.24, gain: 0.55 + Math.random() * 0.25 });
 }
 
 /** A low nicker: a soft, rumbling chuckle. */
@@ -338,35 +364,154 @@ function register(t: number) {
   clack(b + 0.2, 0.25, 1200);
 }
 
-/**
- * The real thing: a recorded mechanical cash register (CC BY-SA 4.0, see
- * public/sounds/CREDITS.md). Until it has loaded, the synthesised one plays.
- */
-let till: AudioBuffer | null = null;
-let tillLoading = false;
-
-function loadTill(): void {
-  if (till || tillLoading || !ac) return;
-  tillLoading = true;
-  fetch('/sounds/register.m4a')
-    .then((r) => r.arrayBuffer())
-    .then((b) => ac!.decodeAudioData(b))
-    .then((buf) => { till = buf; })
-    .catch(() => { tillLoading = false; }); // try again next time
+/** A bell struck once: bright partials ringing out. */
+function ding(t: number, f: number, gain: number) {
+  for (const [ratio, g, decay] of [[1, 1, 1.2], [2.32, 0.5, 0.7], [4.25, 0.3, 0.4]] as const) ring(t, f * ratio, gain * g, decay);
 }
 
-/** Cha-ching! Someone's bet is in. */
+/** A slot-machine jackpot: ding-ding-ding and a shower of coins. */
+function jackpot(t: number) {
+  [1568, 1976, 2349, 1568, 1976, 2349, 3136].forEach((f, i) => ding(t + i * 0.11, f, 0.12));
+  for (let i = 0; i < 45; i++) {
+    const c = t + 0.15 + Math.random() * 1.6;
+    ring(c, 3200 + Math.random() * 3200, 0.03 + Math.random() * 0.04, 0.12 + Math.random() * 0.15);
+    clack(c, 0.08, 5000);
+  }
+}
+
+/**
+ * The sounds a bet can make, picked at random (never the same twice running):
+ * real cash registers and coins, a horse having its say, and some deliberately
+ * over-the-top ones. Each returns false if its recording hasn't loaded yet.
+ */
+const BET_SOUNDS: ((t: number) => boolean)[] = [
+  (t) => play('till', t, { rate: 0.95 + Math.random() * 0.1, gain: 0.95 }), // cha-ching
+  (t) => play('clunk', t, { gain: 1 }), // an old register's clatter and clunk
+  (t) => play('coins', t, { gain: 1 }), // coins into a tin
+  (t) => has('till') && play('till', t, { gain: 1 }) && play('till', t + 0.32, { rate: 1.26, gain: 0.9 }), // cha-ching-CHING!
+  (t) => has('till', 'coins') && play('till', t, { gain: 1 }) && play('coins', t + 0.3, { gain: 1 }), // big spender
+  (t) => { jackpot(t); return true; }, // slot-machine jackpot
+  (t) => { register(t); return true; }, // the synthesised register
+  (t) => play(pick(STALLIONS)!, t, { rate: 0.95 + Math.random() * 0.15, gain: 1 }), // a horse approves
+  (t) => { const h = pick(STALLIONS)!; return has(h, 'till') && play(h, t, { rate: 1.55 + Math.random() * 0.2, gain: 0.9 }) && play('till', t + 0.9, { gain: 0.9 }); }, // horse cackles, then cha-ching
+];
+let lastBetSound = -1;
+
+/** Cha-ching (or something sillier)! Someone's bet is in. */
 export function playRegister(): void {
   if (!ready()) return;
   const t = ac!.currentTime + 0.02;
-  if (!till) { loadTill(); return register(t); }
-  const src = ac!.createBufferSource();
-  src.buffer = till;
-  src.playbackRate.value = 0.95 + Math.random() * 0.1; // a slightly different till each time
+  let i = Math.floor(Math.random() * BET_SOUNDS.length);
+  if (i === lastBetSound) i = (i + 1) % BET_SOUNDS.length;
+  lastBetSound = i;
+  if (!BET_SOUNDS[i](t)) register(t); // recording not loaded yet: the synthesised one
+}
+
+// ---- Photo finish: the crowd, the die, the crash ---------------------------------
+
+let crowd: { bus: GainNode; srcs: AudioScheduledSourceNode[]; timer: number } | null = null;
+
+/** A whoop or whistle from the stands. */
+function whoop(s: number, gain = 0.07) {
+  const o = ac!.createOscillator();
+  o.type = Math.random() < 0.5 ? 'sine' : 'triangle';
+  const f0 = 900 + Math.random() * 900;
+  o.frequency.setValueAtTime(f0, s);
+  o.frequency.exponentialRampToValueAtTime(f0 * (1.4 + Math.random() * 0.6), s + 0.18);
+  o.frequency.exponentialRampToValueAtTime(f0 * 0.9, s + 0.45);
   const g = ac!.createGain();
-  g.gain.value = 0.7;
-  src.connect(g).connect(out!);
-  src.start(t);
+  g.gain.setValueAtTime(0.0001, s);
+  g.gain.exponentialRampToValueAtTime(gain, s + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
+  o.connect(g).connect(out!);
+  o.start(s); o.stop(s + 0.55);
+}
+
+/** The grandstand roaring the horses home: a crowd that keeps going until stopCrowd(). */
+export function startCrowd(): void {
+  if (crowd || !ready()) return;
+  const t = ac!.currentTime;
+  const bus = ac!.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.exponentialRampToValueAtTime(1, t + 1.5);
+  bus.connect(out!);
+  const srcs: AudioScheduledSourceNode[] = [];
+  for (const [freq, q, gain, rate] of [[520, 1.1, 0.3, 0.23], [950, 1.3, 0.2, 0.31], [1700, 1.6, 0.08, 0.17]] as const) {
+    const src = ac!.createBufferSource();
+    src.buffer = noise; src.loop = true;
+    const f = ac!.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ac!.createGain(); g.gain.value = gain;
+    // The roar rises and falls.
+    const lfo = ac!.createOscillator(); lfo.frequency.value = rate;
+    const depth = ac!.createGain(); depth.gain.value = gain * 0.45;
+    lfo.connect(depth).connect(g.gain);
+    src.connect(f).connect(g).connect(bus);
+    src.start(t, Math.random()); lfo.start(t);
+    srcs.push(src, lfo);
+  }
+  const timer = window.setInterval(() => {
+    if (!ready()) return;
+    const now = ac!.currentTime;
+    for (let i = 0; i < 1 + Math.floor(Math.random() * 3); i++) whoop(now + Math.random() * 0.6, 0.05);
+  }, 900);
+  crowd = { bus, srcs, timer };
+}
+
+/** The crowd draws breath ("ooooh") as the die is shaken. */
+export function crowdSwell(seconds = 3): void {
+  if (!crowd || !ready()) return;
+  const t = ac!.currentTime, g = crowd.bus.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(Math.max(0.0001, g.value), t);
+  g.linearRampToValueAtTime(2.2, t + seconds * 0.9);
+  g.linearRampToValueAtTime(1, t + seconds + 0.8);
+}
+
+/** A disappointed "aww" when the die misses. */
+export function playAww(): void {
+  if (!ready()) return;
+  const t = ac!.currentTime + 0.02;
+  noiseBurst(t, 1.1, { type: 'bandpass', freq: 750, freqEnd: 380, q: 1.4, gain: 0.3, attack: 0.15 });
+  noiseBurst(t, 1.1, { type: 'bandpass', freq: 1300, freqEnd: 650, q: 1.6, gain: 0.15, attack: 0.15 });
+}
+
+export function stopCrowd(fade = 1.5): void {
+  if (!crowd) return;
+  const c = crowd;
+  crowd = null;
+  clearInterval(c.timer);
+  if (!ac) return;
+  const t = ac.currentTime;
+  c.bus.gain.cancelScheduledValues(t);
+  c.bus.gain.setValueAtTime(Math.max(0.0001, c.bus.gain.value), t);
+  c.bus.gain.exponentialRampToValueAtTime(0.0001, t + fade);
+  c.srcs.forEach((n) => n.stop(t + fade + 0.1));
+}
+
+/** The die rattling in a cupped hand, then bouncing across the table until it settles. */
+export function playDieRoll(shake = 1, bounce = 2): void {
+  if (!ready()) return;
+  const t0 = ac!.currentTime + 0.02;
+  for (let t = 0; t < shake; t += 0.035 + Math.random() * 0.03) clack(t0 + t, 0.1 + Math.random() * 0.1, 2000 + Math.random() * 1500);
+  const hits = [0, 0.42, 0.78, 1.06, 1.3, 1.48, 1.62, 1.72, 1.8, 1.86];
+  hits.forEach((h, i) => {
+    const at = t0 + shake + h * (bounce / 2);
+    const gain = 0.5 * (1 - i / hits.length) + 0.08;
+    clack(at, gain, 1500 + Math.random() * 1200);
+    thump(at, gain * 0.25);
+  });
+}
+
+/** A horse going down hard: hooves, thuds and a slide in the dirt. */
+export function playTumble(seconds = 2): void {
+  if (!ready()) return;
+  const t0 = ac!.currentTime + 0.02;
+  [0.15, 0.45, 0.8, 1.1, 1.4, 1.65, 1.85].forEach((h, i) => {
+    const at = t0 + h * (seconds / 2);
+    thump(at, 0.35 + (i % 2) * 0.15);
+    noiseBurst(at, 0.25, { type: 'lowpass', freq: 900, gain: 0.25 }); // dirt flying
+  });
+  noiseBurst(t0 + seconds * 0.6, seconds * 0.4, { type: 'bandpass', freq: 600, q: 0.7, gain: 0.15, attack: 0.05, freqEnd: 300 }); // the skid
 }
 
 // ---- The finish: the crowd goes wild --------------------------------------------

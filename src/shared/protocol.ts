@@ -62,6 +62,8 @@ export interface PublicState {
   rounds: number;
   /** What every player starts the game with. */
   startBalance: number;
+  /** Game mode: every digital race ends in a photo finish. */
+  photoEveryRound: boolean;
   /** 1-based; 0 before the game starts. */
   round: number;
   players: PublicPlayer[];
@@ -87,7 +89,7 @@ export type ClientMsg =
   | { t: 'hello'; playerId: string; name: string }
   /** Change your display name (until the game starts). */
   | { t: 'rename'; name: string }
-  | { t: 'config'; rounds?: number; startBalance?: number }
+  | { t: 'config'; rounds?: number; startBalance?: number; photoEveryRound?: boolean }
   | { t: 'start' }
   | { t: 'bets'; bets: Bets }
   /** Lock in; `bets` (what's on screen) are checked and saved in the same step. */

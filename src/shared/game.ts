@@ -102,6 +102,24 @@ export function photoContenders(positions: number[]): number[] | null {
 /** One die (1..6) for the photo finish. */
 export const rollDie = (random: () => number = Math.random): number => 1 + Math.floor(random() * 6);
 
+/**
+ * "Photo finish every round": roll three dice, but quietly choose only from
+ * the throws that don't give any horse an outright win. Once a throw can bring
+ * two or more horses level at the line, take one (usually straight away), so
+ * every race ends in a photo finish. Throws are picked evenly from the 216
+ * ordered combinations, so the race still moves like real dice.
+ */
+export function rollForPhotoFinish(positions: number[], random: () => number = Math.random): number[] {
+  const ties: number[][] = [], open: number[][] = [];
+  for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) for (let c = 1; c <= 6; c++) {
+    const next = applyRoll(positions, [a, b, c]);
+    if (raceWinner(next) !== null) continue;
+    (isTiedAtLine(next) ? ties : open).push([a, b, c]);
+  }
+  const pool = ties.length && (!open.length || random() < 0.75) ? ties : open;
+  return pool.length ? pool[Math.floor(random() * pool.length)] : rollDice(random);
+}
+
 /** A photo-finish die decides it only if it shows one of the contenders; otherwise roll again. */
 export const photoWinner = (contenders: number[], die: number): number | null =>
   contenders.includes(die) ? die : null;

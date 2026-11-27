@@ -17,8 +17,12 @@ export interface HostCtx {
   manualPick: number | null;
   showRace: boolean;
   slideFrom: number[] | null;
-  /** Show the photo finish up close (after the horses have slid to the line). */
-  closeUp: boolean;
+  /** Where the photo finish is up to: the track, zooming in, the close-up's entrance, or ready to roll. */
+  photoStage: 'track' | 'zoom' | 'intro' | 'ready';
+  /** The photo-finish die is being shaken or thrown. */
+  rolling: 'shake' | 'bounce' | null;
+  /** An animation is playing: hold off rolling again. */
+  rollBusy: boolean;
   /** Lobby: the starting budget being typed, or null. */
   budgetText: string | null;
   /** First showing of this round's results: play the celebration. */
@@ -70,6 +74,10 @@ function lobby(s: PublicState, c: HostCtx) {
               <label class="budget-custom ${BUDGET_PRESETS.includes(s.startBalance) ? '' : 'on'}" title="Any amount up to ${money(MAX_BUDGET)}">$<input id="budgetInput" inputmode="numeric" autocomplete="off" maxlength="7" aria-label="Starting budget in dollars" value="${esc(c.budgetText ?? String(s.startBalance))}" /></label>
             </div>
           </div>
+          <label class="toggle">
+            <input type="checkbox" id="photoEveryRound" ${s.photoEveryRound ? 'checked' : ''} />
+            <span><b>📸 Photo finish every round</b><br /><span class="muted small">Digital races always end with horses level at the line, settled one die at a time.</span></span>
+          </label>
           <p class="muted small">Odds stay hidden until everyone has locked in their bets.</p>
           <button class="primary big" id="start" ${n ? '' : 'disabled'}>${n ? `Start game with ${n} ${n === 1 ? 'player' : 'players'}` : 'Waiting for players…'}</button>
         </div>
@@ -129,12 +137,13 @@ function review(s: PublicState) {
 }
 
 function race(s: PublicState, c: HostCtx) {
-  if (s.photo && c.closeUp) {
+  if (s.photo && (c.photoStage === 'intro' || c.photoStage === 'ready')) {
+    const decided = !!s.winner && !c.rolling;
     return `
-      ${photoFinish(s, { big: true })}
-      ${!s.winner ? `
+      ${photoFinish(s, { big: true, intro: c.photoStage === 'intro', rolling: c.rolling })}
+      ${!decided ? `
         <div class="race-controls pf-controls">
-          <button class="primary" id="roll" ${c.autoRoll ? 'disabled' : ''}>🎲 Roll the die</button>
+          <button class="primary" id="roll" ${c.autoRoll || c.rollBusy ? 'disabled' : ''}>🎲 Roll the die</button>
           <button class="secondary" id="auto">${c.autoRoll ? '⏸ Stop' : '⏩ Auto-roll'}</button>
         </div>` : ''}`;
   }
@@ -144,11 +153,11 @@ function race(s: PublicState, c: HostCtx) {
       <span class="muted">Roll ${s.rollCount}</span>
       ${!s.winner ? `
         <div class="race-controls">
-          <button class="primary" id="roll" ${c.autoRoll ? 'disabled' : ''}>🎲 Roll dice</button>
+          <button class="primary" id="roll" ${c.autoRoll || c.rollBusy ? 'disabled' : ''}>🎲 Roll dice</button>
           <button class="secondary" id="auto">${c.autoRoll ? '⏸ Stop' : '⏩ Auto-roll'}</button>
         </div>` : ''}
     </div>
-    ${track(s, { big: true, from: c.slideFrom, followers: true })}
+    ${track(s, { big: true, from: c.slideFrom, followers: true, zoomOn: c.photoStage === 'zoom' ? s.photo!.horses : null })}
     ${raceStatus(s)}`;
 }
 
