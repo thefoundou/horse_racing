@@ -13,7 +13,7 @@ import { joinUrl, qrSvg } from './qr';
 import { horseSvg, slideRunners } from './race';
 import { runCountUps } from './awards-view';
 import { pickPhoto } from './photo';
-import { playBoom, playBugle, playCheer, playGallop, playRegister, playShutters, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
+import { crowdSwell, playAww, playBoom, playBugle, playCheer, playDieRoll, playGallop, playRegister, playShutters, playTumble, startCrowd, stopCrowd, setSound, soundOn, startRaceAmbience, stopRaceAmbience, unlockAudio } from './sound';
 import { app, esc, money, r2, render, store, toast } from './ui';
 import { floorCents } from '../shared/game';
 
@@ -118,8 +118,12 @@ interface Room {
   manualPick: number | null;
   /** Keep the finished race on screen briefly before the results. */
   holdRaceUntil: number;
-  /** A photo finish just began: keep the track up until the horses have slid to the line. */
-  closeUpAt: number;
+  /** When this round's photo finish began on this screen (0: show it as it is now, e.g. after a reload). */
+  photoAt: number;
+  /** When the latest photo-finish die arrived (its shake and throw play from then). */
+  dieAt: number;
+  /** Hold off rolling (auto or by hand) until the current animation has played. */
+  busyUntil: number;
   /** Positions before the latest roll, so the next render can slide from them. */
   slideFrom: number[] | null;
   /** The round whose results celebration has already played. */
@@ -150,7 +154,7 @@ function enterRoom(code: string) {
   const identity = store.get<Identity>(identityKey(code)) ?? { playerId: newId(), name: null };
   room = {
     code, identity, ws: null, state: null, you: identity.playerId, retries: 0, closed: false,
-    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, closeUpAt: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null, nameDraft: null, budgetText: null,
+    draft: null, draftText: [], draftRound: -1, sendTimer: 0, autoRoll: 0, manualPick: null, holdRaceUntil: 0, photoAt: 0, dieAt: 0, busyUntil: 0, slideFrom: null, celebratedRound: -1, lastPhase: '', showQr: false, askPhoto: !!store.get<boolean>(askPhotoKey(code)), photoPreview: store.get<string>('hr:lastPhoto'), photoOutbox: null, nameDraft: null, budgetText: null,
   };
   if (identity.host || identity.name) connect(room);
   else renderNamePrompt(room);
@@ -296,16 +300,26 @@ function onState(r: Room, s: PublicState, you: string) {
     r.draftText = r.draft.map((b) => (b ? String(r2(b)) : ''));
     r.draftRound = s.round;
   }
+  if (!s.photo) { r.photoAt = 0; r.dieAt = 0; }
+  const later = (ms: number) => setTimeout(() => room === r && renderRoom(r), ms + 30);
   if (prev && prev.round === s.round && !prev.photo && s.photo) {
-    // A tie at the line: let the horses slide up to it, then go in close for the photo.
-    r.closeUpAt = Date.now() + 1700;
-    setTimeout(() => room === r && renderRoom(r), 1750);
+    // A tie at the line: the horses slide up to it, the camera zooms in on them,
+    // then the close-up, with the tied horses galloping in to the line.
+    r.photoAt = Date.now();
+    r.busyUntil = r.photoAt + PF.ready;
+    [PF.zoom, PF.intro, PF.ready].forEach(later);
+  }
+  if (prev?.photo && s.photo && prev.round === s.round && s.photo.rolls.length > prev.photo.rolls.length) {
+    // A new photo-finish die: shake it, throw it, and only then show what it says.
+    r.dieAt = Date.now();
+    r.busyUntil = r.dieAt + PF.reveal + 900;
+    [PF.shake, PF.reveal, PF.reveal + 900].forEach(later);
   }
   if (prev?.phase === 'racing' && s.phase === 'results' && s.mode === 'digital') {
-    // Let the winner cross the line (or the photo-finish losers blow up) before the results.
-    const hold = s.photo ? 4600 : 3600;
+    // Let the winner cross the line (or the photo-finish losers crash and blow up) before the results.
+    const hold = s.photo ? PF.reveal + PF.aftermath : 3600;
     r.holdRaceUntil = Date.now() + hold;
-    setTimeout(() => room === r && renderRoom(r), hold + 100);
+    later(hold + 70);
   }
   if (s.phase !== 'racing' || s.mode !== 'digital') stopAuto(r);
   if (s.phase !== 'racing') r.manualPick = null;
@@ -341,17 +355,28 @@ function raceSounds(prev: PublicState | null, s: PublicState) {
     if (moved) playGallop(moved);
   }
   if (s.photo && prev.round === s.round) {
-    const before = prev.photo?.rolls.length ?? -1;
-    // Flashes as the horses reach the line together, then with every die.
-    if (!prev.photo) window.setTimeout(() => playShutters(5), 1700);
-    else if (s.photo.rolls.length > before) playShutters(2);
+    const later = (ms: number, fn: () => void) => window.setTimeout(fn, ms);
+    if (!prev.photo) {
+      // The crowd roars as the camera zooms in, and the flashes go off for the close-up.
+      later(PF.zoom, startCrowd);
+      later(PF.intro, () => playShutters(5));
+    } else if (s.photo.rolls.length > prev.photo.rolls.length) {
+      // Each die: rattle, throw, and the crowd holding its breath; then the verdict.
+      playDieRoll(PF.shake / 1000, (PF.reveal - PF.shake) / 1000);
+      crowdSwell(PF.reveal / 1000);
+      later(PF.reveal, () => playShutters(2));
+      if (!s.winner) later(PF.reveal, playAww);
+    }
   }
+  if (s.phase === 'betting' || s.phase === 'lobby') stopCrowd(0.5);
   if (s.winner && !prev.winner) {
     stopRaceAmbience();
     if (s.photo) {
-      // Photo finish: the losers blow up, then the crowd goes wild.
-      window.setTimeout(() => playBoom(s.photo!.horses.length - 1), 650);
-      window.setTimeout(playCheer, 1300);
+      // Photo finish: the losers tumble and crash, blow up, then the crowd goes wild.
+      window.setTimeout(() => playTumble(PF.tumble / 1000), PF.reveal);
+      window.setTimeout(() => playBoom(s.photo!.horses.length - 1), PF.reveal + PF.tumble);
+      window.setTimeout(playCheer, PF.reveal + PF.tumble + 400);
+      window.setTimeout(() => stopCrowd(2.5), PF.reveal + PF.tumble + 1500);
     } else {
       // Digital: cheer as the winner reaches the line (after its slide). Manual: straight away.
       window.setTimeout(playCheer, s.mode === 'digital' ? 1100 : 0);
@@ -363,6 +388,45 @@ function raceSounds(prev: PublicState | null, s: PublicState) {
 // Browsers only allow sound after the page is clicked: wake the audio on the first click or key.
 document.addEventListener('pointerdown', unlockAudio);
 document.addEventListener('keydown', unlockAudio);
+
+// ---- Photo-finish timing (ms) --------------------------------------------------
+
+const PF = {
+  zoom: 1700, // the horses slide up to the line, then the camera starts zooming in
+  intro: 4400, // the close-up: the tied horses gallop in to the line
+  ready: 6800, // ready for the first die
+  shake: 1000, // each die: shaken (glowing) for this long…
+  reveal: 3000, // …then bounces about until it lands, here
+  tumble: 2000, // the losers tumble and crash for this long, then explode
+  aftermath: 2000 + 2600, // tumble, explosion and a moment to take it in, before the results
+};
+const AUTO_ROLL_MS = 3900;
+
+function stageOf(r: Room, s: PublicState): 'track' | 'zoom' | 'intro' | 'ready' {
+  if (!s.photo) return 'track';
+  const t = Date.now() - r.photoAt;
+  return t < PF.zoom ? 'track' : t < PF.intro ? 'zoom' : t < PF.ready ? 'intro' : 'ready';
+}
+function rollingOf(r: Room, s: PublicState): 'shake' | 'bounce' | null {
+  if (!s.photo?.rolls.length || !r.dieAt) return null;
+  const t = Date.now() - r.dieAt;
+  return t < PF.shake ? 'shake' : t < PF.reveal ? 'bounce' : null;
+}
+
+/** While the photo-finish die bounces, flick its face through random numbers. */
+let spinTimer = 0;
+function spinDie() {
+  clearInterval(spinTimer);
+  const die = app.querySelector<HTMLElement>('.pf-die.bounce');
+  if (!die) return;
+  spinTimer = window.setInterval(() => {
+    if (!die.isConnected) return clearInterval(spinTimer);
+    const n = 1 + Math.floor(Math.random() * 6);
+    die.classList.remove('h1', 'h2', 'h3', 'h4', 'h5', 'h6');
+    die.classList.add('h' + n);
+    die.textContent = String(n);
+  }, 110);
+}
 
 function stopAuto(r: Room) {
   clearInterval(r.autoRoll);
@@ -425,7 +489,7 @@ function renderRoom(r: Room) {
   if (!isHost && me && s.phase === 'betting' && !offline && !r.showQr && !document.getElementById('reconnecting')) {
     const form = document.getElementById('betForm');
     if (form && form.dataset.key === bettingKey(s, me)) {
-      patchBetting(s, me, { draft: r.draft, draftText: r.draftText, showRace: false, slideFrom: null, closeUp: false, celebrate: false });
+      patchBetting(s, me, { draft: r.draft, draftText: r.draftText, showRace: false, slideFrom: null, photoStage: 'track', rolling: null, celebrate: false });
       return;
     }
   }
@@ -437,9 +501,9 @@ function renderRoom(r: Room) {
     || (s.phase === 'finished' && r.celebratedRound !== FINAL_SHOWN);
 
   let body: string;
-  const closeUp = !!s.photo && Date.now() >= r.closeUpAt;
-  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, closeUp, budgetText: r.budgetText, celebrate });
-  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, closeUp, celebrate, nameDraft: r.nameDraft });
+  const photoStage = stageOf(r, s), rolling = rollingOf(r, s), rollBusy = Date.now() < r.busyUntil;
+  if (isHost) body = hostScreen(s, { autoRoll: !!r.autoRoll, manualPick: r.manualPick, showRace, slideFrom: r.slideFrom, photoStage, rolling, rollBusy, budgetText: r.budgetText, celebrate });
+  else if (me) body = playerScreen(s, me, { draft: r.draft, draftText: r.draftText, showRace, slideFrom: r.slideFrom, photoStage, rolling, celebrate, nameDraft: r.nameDraft });
   else return; // not joined yet
 
   const roundLabel = s.round > 0 ? `Round ${s.round} of ${s.rounds}` : isHost ? 'Big screen' : 'Lobby';
@@ -465,6 +529,7 @@ function renderRoom(r: Room) {
   document.getElementById('overlayShare')?.addEventListener('click', () => share(s.code));
   r.slideFrom = null; // slide once; later re-renders draw horses where they are
   slideRunners(app);
+  spinDie();
   if (celebrate) {
     r.celebratedRound = s.phase === 'finished' ? FINAL_SHOWN : s.round;
     if (s.phase === 'results') runCountUps(app, s.players.length);
@@ -528,6 +593,8 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('roundsDown', () => send({ t: 'config', rounds: s.rounds - 1 }));
   on('roundsUp', () => send({ t: 'config', rounds: s.rounds + 1 }));
   on('start', () => send({ t: 'start' }));
+  const photoMode = document.getElementById('photoEveryRound') as HTMLInputElement | null;
+  if (photoMode) photoMode.onchange = () => send({ t: 'config', photoEveryRound: photoMode.checked });
   // Starting budget: a quick pick, or any whole-dollar amount typed in.
   app.querySelectorAll<HTMLButtonElement>('[data-budget]').forEach((b) => {
     b.onclick = () => { r.budgetText = null; send({ t: 'config', startBalance: Number(b.dataset.budget) }); };
@@ -560,7 +627,11 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
   on('roll', () => send({ t: 'roll' }));
   on('auto', () => {
     if (r.autoRoll) stopAuto(r);
-    else { send({ t: 'roll' }); r.autoRoll = window.setInterval(() => send({ t: 'roll' }), 1900); }
+    else {
+      if (Date.now() >= r.busyUntil) send({ t: 'roll' });
+      // A roll every 3.9 s, and never while a photo-finish animation is still playing.
+      r.autoRoll = window.setInterval(() => { if (Date.now() >= r.busyUntil) send({ t: 'roll' }); }, AUTO_ROLL_MS);
+    }
     renderRoom(r);
   });
   on('finish', () => send({ t: 'finish' }));

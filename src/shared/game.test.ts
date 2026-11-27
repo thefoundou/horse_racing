@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyRoll, cents, emptyBets, floorCents, isTiedAtLine, net, odds, payout, photoContenders, photoWinner, pool, raceWinner, rollDice, rollDie, sum,
+  applyRoll, cents, emptyBets, floorCents, isTiedAtLine, net, odds, payout, photoContenders, photoWinner, rollForPhotoFinish, pool, raceWinner, rollDice, rollDie, sum,
   validateBets, type Bets,
 } from './game';
 
@@ -100,6 +100,21 @@ describe('digital race', () => {
     expect(photoContenders([11, 11, 10, 0, 0, 0])).toEqual([1, 2]);
     expect(photoContenders([10, 9, 0, 0, 0, 0])).toBeNull();
     expect(photoContenders([9, 9, 0, 0, 0, 0])).toBeNull();
+  });
+
+  it('photo-finish mode always ends a race in a tie at the line', () => {
+    for (let race = 0; race < 300; race++) {
+      let pos = [0, 0, 0, 0, 0, 0];
+      let rolls = 0;
+      while (!photoContenders(pos)) {
+        const dice = rollForPhotoFinish(pos);
+        expect(dice).toHaveLength(3);
+        pos = applyRoll(pos, dice);
+        expect(raceWinner(pos)).toBeNull();
+        expect(++rolls).toBeLessThan(200);
+      }
+      expect(photoContenders(pos)!.length).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it('a photo-finish die counts only if it shows a contender', () => {

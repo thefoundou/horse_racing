@@ -5,7 +5,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-  applyRoll, cents, emptyBets, HORSES, horseTotals, net, photoContenders, photoWinner, raceWinner, rollDice, rollDie, START_BALANCE, sum,
+  applyRoll, cents, emptyBets, HORSES, horseTotals, net, photoContenders, photoWinner, raceWinner, rollDice, rollDie, rollForPhotoFinish, START_BALANCE, sum,
   tidy, validateBets, type Bets,
 } from '../shared/game';
 import {
@@ -33,6 +33,8 @@ interface State {
   rounds: number;
   /** What every player starts with (START_BALANCE if never set). */
   startBalance?: number;
+  /** Game mode: the dice are quietly steered so every digital race ends in a photo finish. */
+  photoEveryRound?: boolean;
   round: number;
   players: Player[];
   mode: RaceMode | null;
@@ -191,6 +193,7 @@ export class Lobby extends DurableObject<Env> {
           if (!(n >= 1 && n <= MAX_ROUNDS)) fail(`Rounds must be 1-${MAX_ROUNDS}.`);
           s.rounds = n;
         }
+        if (msg.photoEveryRound !== undefined) s.photoEveryRound = msg.photoEveryRound === true;
         if (msg.startBalance !== undefined) {
           const b = Math.floor(Number(msg.startBalance));
           if (!(b >= MIN_BUDGET && b <= MAX_BUDGET)) fail(`The starting budget must be $${MIN_BUDGET}-$${MAX_BUDGET.toLocaleString('en-US')}.`);
@@ -264,7 +267,7 @@ export class Lobby extends DurableObject<Env> {
           if (w !== null) this.settle(s, w - 1);
           return;
         }
-        const dice = rollDice();
+        const dice = s.photoEveryRound ? rollForPhotoFinish(s.positions) : rollDice();
         s.positions = applyRoll(s.positions, dice);
         s.lastRoll = dice;
         const w = raceWinner(s.positions);
@@ -381,7 +384,7 @@ export class Lobby extends DurableObject<Env> {
   private view(s: State, you: string | null, online: Set<string>): PublicState {
     const open = s.phase === 'lobby' || s.phase === 'betting';
     return {
-      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, startBalance: s.startBalance ?? START_BALANCE, round: s.round,
+      code: s.code, hostId: s.hostId, phase: s.phase, rounds: s.rounds, startBalance: s.startBalance ?? START_BALANCE, photoEveryRound: !!s.photoEveryRound, round: s.round,
       players: s.players.map((p) => {
         const visible = p.id === you || !open;
         return {

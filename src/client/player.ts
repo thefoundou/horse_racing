@@ -15,7 +15,8 @@ export interface PlayerCtx {
   draftText: string[];
   showRace: boolean;
   slideFrom: number[] | null;
-  closeUp: boolean;
+  photoStage: 'track' | 'zoom' | 'intro' | 'ready';
+  rolling: 'shake' | 'bounce' | null;
   /** Lobby: the name being edited, or null when not editing. */
   nameDraft?: string | null;
   celebrate: boolean;
@@ -176,18 +177,18 @@ function review(s: PublicState, me: PublicPlayer) {
 
 function race(s: PublicState, me: PublicPlayer, c: PlayerCtx) {
   const backed = (me.bets ?? []).some((b) => b > 0);
-  if (s.photo && c.closeUp) {
+  if (s.photo && (c.photoStage === 'intro' || c.photoStage === 'ready')) {
     const inIt = s.photo.horses.some((h) => (me.bets?.[h - 1] ?? 0) > 0);
     return `
-      ${photoFinish(s, { mine: me.bets })}
-      ${inIt && !s.winner ? '<p class="mine-note">✨ Your horse is in the photo!</p>' : ''}
+      ${photoFinish(s, { mine: me.bets, intro: c.photoStage === 'intro', rolling: c.rolling })}
+      ${inIt && (!s.winner || c.rolling) ? '<p class="mine-note">✨ Your horse is in the photo!</p>' : ''}
       ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;
   }
   return `
     <div class="card race">
       <div class="race-top">${dice(s.lastRoll)}<span class="muted small">Roll ${s.rollCount}</span></div>
       ${backed ? '<p class="mine-note">✨ Your horses are glowing</p>' : ''}
-      ${track(s, { from: c.slideFrom, mine: me.bets })}
+      ${track(s, { from: c.slideFrom, mine: me.bets, zoomOn: c.photoStage === 'zoom' ? s.photo!.horses : null })}
       ${raceStatus(s)}
     </div>
     ${s.winner ? '' : `<p class="waiting">Watch the ${bigScreen}!</p>`}`;

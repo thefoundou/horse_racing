@@ -65,7 +65,7 @@ function followers(s: PublicState, h: number): string {
  */
 export function track(
   s: PublicState,
-  opts: { big?: boolean; from?: number[] | null; followers?: boolean; mine?: number[] | null } = {},
+  opts: { big?: boolean; from?: number[] | null; followers?: boolean; mine?: number[] | null; zoomOn?: number[] | null } = {},
 ): string {
   const running = s.phase === 'racing' && !s.winner;
   const lead = Math.max(...s.positions);
@@ -87,11 +87,28 @@ export function track(
         <span class="lane-odds" title="Odds for horse ${h}">${odds(i)}</span>
       </div>`;
   }).join('');
-  return `
-    <div class="track ${opts.big ? 'large' : ''} ${opts.followers ? 'followers-on' : ''} ${running ? 'running' : ''}">
+  // Zooming in on a photo finish: frame the finish line and every horse in the photo.
+  const zoom = opts.zoomOn?.length ? opts.zoomOn : null;
+  let zoomStyle = '';
+  if (zoom) {
+    const lane = 92 / HORSES; // each lane's share of the track's height, in %, below an 8% ruler
+    const top = 8 + (Math.min(...zoom) - 1) * lane, bottom = 8 + Math.max(...zoom) * lane;
+    const k = Math.max(1.6, Math.min(3.4, 92 / (bottom - top + 10))); // as close as fits them all
+    // With transform-origin o and scale k, the middle of the view lands on o + (50 - o) / k:
+    // choose o so that's the finish line (88% across) and the horses' midpoint, kept far
+    // enough from the edges that the view never runs off the track.
+    const origin = (target: number) => {
+      const t = Math.max(50 / k, Math.min(100 - 50 / k, target));
+      return (t * k - 50) / (k - 1);
+    };
+    zoomStyle = ` style="--zx:${origin(88).toFixed(1)}%; --zy:${origin((top + bottom) / 2).toFixed(1)}%; --zk:${k.toFixed(2)}"`;
+  }
+  const html = `
+    <div class="track ${opts.big ? 'large' : ''} ${opts.followers ? 'followers-on' : ''} ${running ? 'running' : ''} ${zoom ? 'pf-zoom' : ''}"${zoomStyle}>
       <div class="ruler"><span class="gate-sp"></span><div class="marks">${marks}</div><span class="lane-pos"></span><span class="lane-odds">Odds</span></div>
       ${lanes}
     </div>`;
+  return zoom ? `<div class="zoom-frame">${html}<div class="zoom-vignette" aria-hidden="true"><span>📸 Photo finish!</span></div></div>` : html;
 }
 
 /** Start the slides set up by track({ from }); call right after rendering. */
@@ -125,13 +142,26 @@ const listAnd = (xs: number[]) => xs.length <= 2 ? xs.join(' and ') : `${xs.slic
  * neck, with camera flashes. One die at a time decides it; once it shows one
  * of them, that horse surges ahead and the others blow up.
  */
-export function photoFinish(s: PublicState, opts: { big?: boolean; mine?: number[] | null } = {}): string {
+export function photoFinish(
+  s: PublicState,
+  opts: { big?: boolean; mine?: number[] | null; intro?: boolean; rolling?: 'shake' | 'bounce' | null } = {},
+): string {
   const pf = s.photo!;
-  const w = s.winner && pf.horses.includes(s.winner) ? s.winner : null;
-  const last = pf.rolls[pf.rolls.length - 1] ?? null;
-  const caption = w ? `Rolled a ${w}! <b>Horse ${w} wins by a nose!</b>`
+  // While the latest die is still being shaken and thrown, the result stays secret.
+  const rolls = opts.rolling ? pf.rolls.slice(0, -1) : pf.rolls;
+  const w = !opts.rolling && s.winner && pf.horses.includes(s.winner) ? s.winner : null;
+  const last = rolls[rolls.length - 1] ?? null;
+  const caption = opts.rolling === 'shake' ? `Shaking the die… <b>needs a ${listOr(pf.horses)}!</b>`
+    : opts.rolling === 'bounce' ? 'Rolling… <b>come on…</b>'
+    : w ? `Rolled a ${w}! <b>Horse ${w} wins by a nose!</b>`
     : last ? `Rolled a ${last}: not in the photo. <b>Roll again!</b>`
     : `Horses ${listAnd(pf.horses)} hit the line together! <b>One die decides it: a ${listOr(pf.horses)} wins.</b>`;
+  // The die tray: shaking, bouncing, or showing where it landed.
+  const tray = opts.rolling
+    ? `<span class="die pf-die ${opts.rolling} h1">?</span>`
+    : last ? `<span class="die pf-die landed h${last} ${pf.horses.includes(last) ? 'hit' : 'miss'}">${last}</span>`
+    : '<span class="die pf-die idle">?</span>';
+  const dust = Array.from({ length: 5 }, (_, k) => `<i style="--d:${(0.25 + k * 0.35).toFixed(2)}s; --x:${-k * 4}cqw"></i>`).join('');
   const debris = Array.from({ length: 12 }, (_, k) => `<i style="--a:${k * 30 + (k % 3) * 9}deg; --d:${0.7 + (k % 4) * 0.22}"></i>`).join('');
   const lanes = pf.horses.map((h, i) => {
     const state = w === null ? '' : h === w ? 'pf-win' : 'pf-lose';
@@ -140,13 +170,13 @@ export function photoFinish(s: PublicState, opts: { big?: boolean; mine?: number
         <span class="gate h${h}">${h}</span>
         <span class="lane-odds pf-odds">${s.totals && s.totals[h - 1] > 0 ? oddsText(sum(s.totals) / s.totals[h - 1]) : '—'}</span>
         <div class="pf-runner">${horseSvg(h)}</div>
-        ${state === 'pf-lose' ? `<div class="pf-boom" aria-hidden="true"><span>💥</span>${debris}</div>` : ''}
+        ${state === 'pf-lose' ? `<div class="pf-dust" aria-hidden="true">${dust}</div><div class="pf-boom" aria-hidden="true"><span>💥</span>${debris}</div>` : ''}
       </div>`;
   }).join('');
-  const tries = pf.rolls.map((d, k) =>
-    `<span class="die h${d} ${pf.horses.includes(d) ? '' : 'miss'}" ${k === pf.rolls.length - 1 ? '' : 'style="animation:none"'}>${d}</span>`).join('');
+  const tries = rolls.map((d) =>
+    `<span class="die h${d} ${pf.horses.includes(d) ? '' : 'miss'}" style="animation:none">${d}</span>`).join('');
   return `
-    <div class="photo-finish ${opts.big ? 'large' : ''} ${w ? 'decided' : ''}" role="group" aria-label="Photo finish">
+    <div class="photo-finish ${opts.big ? 'large' : ''} ${w ? 'decided' : ''} ${opts.intro ? 'intro' : ''} ${opts.rolling ? 'rolling' : ''}" role="group" aria-label="Photo finish">
       <div class="pf-flash" aria-hidden="true"></div>
       <div class="pf-bulbs" aria-hidden="true">${'<i></i>'.repeat(6)}</div>
       <div class="pf-title">📸 Photo finish!</div>
@@ -155,7 +185,8 @@ export function photoFinish(s: PublicState, opts: { big?: boolean; mine?: number
         ${lanes}
       </div>
       <p class="pf-caption" aria-live="polite">${caption}</p>
-      ${tries ? `<div class="dice pf-tries ${opts.big ? 'large' : ''}">${tries}</div>` : ''}
+      ${opts.intro ? '' : `<div class="pf-tray" aria-hidden="true">${tray}</div>`}
+      ${tries ? `<div class="dice pf-tries">${tries}</div>` : ''}
     </div>`;
 }
 
