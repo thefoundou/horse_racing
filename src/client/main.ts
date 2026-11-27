@@ -400,7 +400,7 @@ const PF = {
   tumble: 2000, // the losers tumble and crash for this long, then explode
   aftermath: 2000 + 2600, // tumble, explosion and a moment to take it in, before the results
 };
-const AUTO_ROLL_MS = 3900;
+const AUTO_ROLL_MS = 2500;
 
 function stageOf(r: Room, s: PublicState): 'track' | 'zoom' | 'intro' | 'ready' {
   if (!s.photo) return 'track';
@@ -629,7 +629,7 @@ function bind(r: Room, s: PublicState, me: PublicPlayer | undefined) {
     if (r.autoRoll) stopAuto(r);
     else {
       if (Date.now() >= r.busyUntil) send({ t: 'roll' });
-      // A roll every 3.9 s, and never while a photo-finish animation is still playing.
+      // A roll every 2.5 s, and never while a photo-finish animation is still playing.
       r.autoRoll = window.setInterval(() => { if (Date.now() >= r.busyUntil) send({ t: 'roll' }); }, AUTO_ROLL_MS);
     }
     renderRoom(r);
